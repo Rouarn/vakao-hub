@@ -7,7 +7,12 @@
 import 'dotenv/config';
 import { resolve } from 'node:path';
 
+/**
+ * 空值一律回落到默认值：`Number('')` 是 0，若不拦截，`PORT=`、`UPLOAD_MAX_BYTES=`
+ * 这类留空写法会静默变成 0（前者监听随机端口，后者让所有上传被拒），与 toBool 的空值语义也不一致。
+ */
 function toInt(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -87,8 +92,26 @@ export const env = {
 
 export type AppEnv = typeof env;
 
+/**
+ * 示例文件（.env.example / .env.production.example）里的占位值。
+ * 这些串是公开的，照抄上线等于把签名密钥交给所有人，所以生产环境宁可拒绝启动。
+ */
+const PLACEHOLDER_VALUE = /^(?:replace-with-|please-change-this-)/i;
+
 // 生产环境硬校验：避免把开发期行为带上线
 if (isProduction) {
+  // 占位值单独先拦：示例里的占位串长度通常已满足下面的长度要求，只查长度会漏过
+  const secrets: ReadonlyArray<readonly [string, string]> = [
+    ['JWT_SECRET', env.jwt.secret],
+    ['ADMIN_PASSWORD', env.admin.password],
+    ['DB_PASSWORD', env.db.password],
+  ];
+  for (const [name, value] of secrets) {
+    if (PLACEHOLDER_VALUE.test(value)) {
+      throw new Error(`生产环境 ${name} 仍是示例占位值，请替换为真实值`);
+    }
+  }
+
   if (!process.env.JWT_SECRET || env.jwt.secret.length < 32) {
     throw new Error('生产环境 JWT_SECRET 必须显式配置且至少 32 字符');
   }
