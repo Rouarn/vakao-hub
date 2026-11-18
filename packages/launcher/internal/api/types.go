@@ -7,18 +7,27 @@ type CatalogResponse struct {
 }
 
 type CatalogApp struct {
-	ID          int      `json:"id"`
-	AppKey      string   `json:"appKey"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	IconURL     string   `json:"iconUrl"`
-	Category    string   `json:"category"`
-	RepoURL     string   `json:"repoUrl"`
-	Homepage    string   `json:"homepage"`
-	DocsURL     string   `json:"docsUrl"`
-	ReleaseURL  string   `json:"releaseUrl"`
-	ThemeColor  string   `json:"themeColor"`
-	Latest      *Release `json:"latest"`
+	ID          int       `json:"id"`
+	AppKey      string    `json:"appKey"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IconURL     string    `json:"iconUrl"`
+	Category    string    `json:"category"`
+	RepoURL     string    `json:"repoUrl"`
+	Homepage    string    `json:"homepage"`
+	DocsURL     string    `json:"docsUrl"`
+	ReleaseURL  string    `json:"releaseUrl"`
+	ThemeColor  string    `json:"themeColor"`
+	Tagline     string    `json:"tagline"`
+	Features    []Feature `json:"features"`
+	Screenshots []string  `json:"screenshots"`
+	Latest      *Release  `json:"latest"`
+}
+
+// Feature 详情页功能点
+type Feature struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type Release struct {

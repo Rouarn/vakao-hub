@@ -20,6 +20,9 @@ export interface AppView {
   docsUrl: string;
   releaseUrl: string;
   themeColor: string;
+  tagline: string;
+  features: Array<{ title: string; description: string }>;
+  screenshots: string[];
   latestVersion: string;
   latestVersionCode: number;
   latestPublishedAt: number;

@@ -121,7 +121,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { appApi, type AppView, type Progress, type Settings } from './api';
 import type { DetailMeta } from './lib/meta';
-import { DETAIL_META } from './lib/detail-meta';
+
 import AppCard from './components/AppCard.vue';
 import AppDetailPanel from './components/AppDetailPanel.vue';
 import LauncherHeader from './components/LauncherHeader.vue';
@@ -243,14 +243,17 @@ const selectedMeta = computed<DetailMeta>(() => {
   if (!selected.value) {
     return { tagline: '', features: [], screenshots: [] };
   }
-  return DETAIL_META[selected.value.appKey] ?? {
-    tagline: selected.value.description || '暂无描述',
-    features: [
-      { title: '统一分发', description: '由 VaKao Hub 维护版本、产物与更新记录。' },
-      { title: '完整性校验', description: '下载后校验 SHA-256，macOS 额外检查代码签名。' },
-      { title: '持续更新', description: '启动器会检查新版本，并在本机完成安装。' },
-    ],
-    screenshots: [],
+  const app = selected.value;
+  return {
+    tagline: app.tagline || app.description || '暂无描述',
+    features: app.features?.length
+      ? app.features
+      : [
+          { title: '统一分发', description: '由 VaKao Hub 维护版本、产物与更新记录。' },
+          { title: '完整性校验', description: '下载后校验 SHA-256，macOS 额外检查代码签名。' },
+          { title: '持续更新', description: '启动器会检查新版本，并在本机完成安装。' },
+        ],
+    screenshots: app.screenshots ?? [],
   };
 });
 

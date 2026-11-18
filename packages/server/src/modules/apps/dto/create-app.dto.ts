@@ -1,9 +1,13 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsOptional,
   IsString,
   IsUrl,
   Length,
   Matches,
+  ValidateNested,
 } from 'class-validator';
 
 export class CreateAppDto {
@@ -56,4 +60,33 @@ export class CreateAppDto {
   @IsOptional()
   @Matches(/^#[0-9A-Fa-f]{6}$/, { message: 'themeColor 必须是 #RRGGBB' })
   themeColor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 160)
+  tagline?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => FeatureDto)
+  features?: FeatureDto[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @Length(1, 512, { each: true })
+  screenshots?: string[] | null;
+}
+
+export class FeatureDto {
+  @IsString()
+  @Length(1, 64)
+  title!: string;
+
+  @IsString()
+  @Length(0, 200)
+  description!: string;
 }

@@ -189,6 +189,17 @@ export class CatalogService {
     return entries;
   }
 
+  /** 站内媒体路径（/api/v1/media/…）补成绝对地址，外链原样返回 */
+  private absoluteMedia(value: string | null, req: Request): string | null {
+    if (!value) return null;
+    if (/^https?:\/\//i.test(value)) return value;
+    if (!value.startsWith('/')) return value;
+    const base =
+      env.publicBaseUrl ||
+      `${req.protocol}://${req.get('host') ?? 'localhost'}`;
+    return `${base.replace(/\/$/, '')}${value}`;
+  }
+
   private toCatalogApp(entry: CatalogEntry, req: Request): CatalogApp {
     const { app, release, artifacts } = entry;
     return {
@@ -196,13 +207,18 @@ export class CatalogService {
       appKey: app.appKey,
       name: app.name,
       description: app.description,
-      iconUrl: app.iconUrl,
+      iconUrl: this.absoluteMedia(app.iconUrl, req),
       category: app.category,
       repoUrl: app.repoUrl,
       homepage: app.homepage,
       docsUrl: app.docsUrl,
       releaseUrl: app.releaseUrl,
       themeColor: app.themeColor,
+      tagline: app.tagline,
+      features: app.features,
+      screenshots:
+        app.screenshots?.map((item) => this.absoluteMedia(item, req) ?? item) ??
+        null,
       latest: {
         id: release.id,
         versionName: release.versionName,

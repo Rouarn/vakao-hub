@@ -1,4 +1,5 @@
 import { del, get, patch, post } from './client';
+import http from './client';
 import type {
   AppRow,
   AuditLog,
@@ -42,6 +43,25 @@ export const api = {
     update: (id: number, data: Partial<AppRow>) =>
       patch<AppRow>(`/admin/apps/${id}`, data),
     remove: (id: number) => del<{ success: true }>(`/admin/apps/${id}`),
+  },
+
+  media: {
+    upload: async (
+      file: File,
+      scope: 'icon' | 'screens',
+      appKey: string,
+    ): Promise<{ path: string; size: number }> => {
+      const data = new FormData();
+      data.append('file', file);
+      data.append('scope', scope);
+      data.append('appKey', appKey);
+      return (await http.post('/admin/media', data)) as unknown as {
+        path: string;
+        size: number;
+      };
+    },
+    remove: (path: string) =>
+      del<{ success: true }>(`/admin/media?path=${encodeURIComponent(path)}`),
   },
 
   releases: {

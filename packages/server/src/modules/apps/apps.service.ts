@@ -46,6 +46,9 @@ export class AppsService {
         docsUrl: dto.docsUrl ?? null,
         releaseUrl: dto.releaseUrl ?? null,
         themeColor: dto.themeColor ?? null,
+        tagline: dto.tagline ?? null,
+        features: dto.features ?? null,
+        screenshots: dto.screenshots ?? null,
         createdAt: now,
         updatedAt: now,
       }),
@@ -64,6 +67,9 @@ export class AppsService {
       ...(dto.docsUrl !== undefined ? { docsUrl: dto.docsUrl } : {}),
       ...(dto.releaseUrl !== undefined ? { releaseUrl: dto.releaseUrl } : {}),
       ...(dto.themeColor !== undefined ? { themeColor: dto.themeColor } : {}),
+      ...(dto.tagline !== undefined ? { tagline: dto.tagline } : {}),
+      ...(dto.features !== undefined ? { features: dto.features } : {}),
+      ...(dto.screenshots !== undefined ? { screenshots: dto.screenshots } : {}),
       updatedAt: Date.now(),
     });
     return this.apps.save(app);
@@ -74,6 +80,10 @@ export class AppsService {
     // 版本与产物由数据库外键级联删除；磁盘目录随应用一起清理
     await this.apps.remove(app);
     await rm(join(env.storageDir, app.appKey), { recursive: true, force: true });
+    await rm(join(env.storageDir, 'media', 'screens', app.appKey), {
+      recursive: true,
+      force: true,
+    });
     return { success: true };
   }
 }

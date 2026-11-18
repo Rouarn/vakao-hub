@@ -28,6 +28,18 @@ export class AppEntity {
   @Column({ type: 'varchar', length: 512, nullable: true })
   iconUrl!: string | null;
 
+  /** 详情页一句话定位 */
+  @Column({ type: 'varchar', length: 160, nullable: true })
+  tagline!: string | null;
+
+  /** 详情页功能点：[{ title, description }] */
+  @Column({ type: 'json', nullable: true })
+  features!: Array<{ title: string; description: string }> | null;
+
+  /** 详情页截图（有序数组，支持多图） */
+  @Column({ type: 'json', nullable: true })
+  screenshots!: string[] | null;
+
   @Column({ type: 'varchar', length: 32, nullable: true })
   category!: string | null;
 

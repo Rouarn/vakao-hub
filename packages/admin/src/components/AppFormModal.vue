@@ -10,8 +10,12 @@
       <n-form-item label="分类">
         <n-input v-model:value="form.category" placeholder="desktop / mobile / tool" />
       </n-form-item>
-      <n-form-item label="图标 URL">
-        <n-input v-model:value="form.iconUrl" placeholder="https://..." />
+      <n-form-item label="图标">
+        <MediaUploader
+          v-model="form.iconUrl"
+          scope="icon"
+          :app-key="form.appKey"
+        />
       </n-form-item>
       <n-form-item label="仓库">
         <n-input v-model:value="form.repoUrl" placeholder="https://github.com/..." />
@@ -46,6 +50,27 @@
       <n-form-item label="描述">
         <n-input v-model:value="form.description" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" />
       </n-form-item>
+      <n-form-item label="一句话">
+        <n-input v-model:value="form.tagline" placeholder="详情页顶部的一句话定位" :maxlength="160" />
+      </n-form-item>
+      <n-form-item label="功能点">
+        <div class="feature-list">
+          <div v-for="(item, index) in form.features" :key="index" class="feature-item">
+            <n-input v-model:value="item.title" size="small" placeholder="标题" style="width: 110px" />
+            <n-input v-model:value="item.description" size="small" placeholder="描述" />
+            <n-button size="tiny" quaternary @click="removeFeature(index)">✕</n-button>
+          </div>
+          <n-button size="tiny" dashed @click="addFeature">+ 添加功能点</n-button>
+        </div>
+      </n-form-item>
+      <n-form-item label="详情截图">
+        <MediaUploader
+          v-model="form.screenshots"
+          scope="screens"
+          :app-key="form.appKey"
+          multiple
+        />
+      </n-form-item>
     </n-form>
     <template #footer>
       <div style="display: flex; justify-content: flex-end; gap: 10px">
@@ -61,6 +86,7 @@ import { NButton, NColorPicker, NForm, NFormItem, NInput, NModal, useMessage } f
 import { reactive, ref, watch } from 'vue';
 import { api } from '@/api';
 import type { AppRow } from '@/api/types';
+import MediaUploader from './MediaUploader.vue';
 
 const props = defineProps<{
   show: boolean;
@@ -89,7 +115,19 @@ const form = reactive({
   releaseUrl: '',
   themeColor: '',
   description: '',
+  tagline: '',
+  features: [] as Array<{ title: string; description: string }>,
+  screenshots: [] as string[],
 });
+
+function addFeature(): void {
+  if (form.features.length >= 8) return;
+  form.features.push({ title: '', description: '' });
+}
+
+function removeFeature(index: number): void {
+  form.features.splice(index, 1);
+}
 
 function autoColorForKey(key: string): string {
   let hash = 0;
@@ -123,6 +161,9 @@ function fill(row: AppRow | null): void {
   themeAuto.value = !row?.themeColor;
   form.themeColor = row?.themeColor ?? autoColorForKey(row?.appKey ?? '');
   form.description = row?.description ?? '';
+  form.tagline = row?.tagline ?? '';
+  form.features = (row?.features ?? []).map((item) => ({ ...item }));
+  form.screenshots = [...(row?.screenshots ?? [])];
 }
 
 watch(
@@ -159,6 +200,14 @@ async function save(): Promise<void> {
       releaseUrl: form.releaseUrl.trim() || null,
       themeColor: themeAuto.value ? null : form.themeColor || null,
       description: form.description.trim() || null,
+      tagline: form.tagline.trim() || null,
+      features: form.features
+        .filter((item) => item.title.trim())
+        .map((item) => ({
+          title: item.title.trim(),
+          description: item.description.trim(),
+        })),
+      screenshots: form.screenshots,
     };
     if (props.editing) {
       await api.apps.update(props.editing.id, payload);
@@ -183,5 +232,19 @@ async function save(): Promise<void> {
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0.02em;
+}
+</style>
+
+<style scoped>
+.feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.feature-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 </style>

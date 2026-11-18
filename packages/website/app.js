@@ -9,11 +9,6 @@
     linux: 'Linux',
   };
   var platformOrder = ['darwin', 'win32', 'android', 'linux'];
-  var iconMap = {
-    vakaohub: './assets/icons/vakaohub.png',
-    wiredeck: './assets/icons/wiredeck.png',
-    dianmo: './assets/icons/dianmo.png',
-  };
   var palette = ['#5fbedc', '#f0995f', '#a27fc2', '#eddf55'];
 
   var state = {
@@ -119,7 +114,7 @@
   }
 
   function iconFor(app) {
-    var source = app.iconUrl || iconMap[app.appKey] || '';
+    var source = app.iconUrl || '';
     if (!source) {
       var fallback = el('div', {
         class: 'app-icon',

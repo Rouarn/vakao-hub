@@ -73,33 +73,36 @@ type Progress struct {
 }
 
 type AppView struct {
-	AppKey               string   `json:"appKey"`
-	Name                 string   `json:"name"`
-	Description          string   `json:"description"`
-	IconURL              string   `json:"iconUrl"`
-	Category             string   `json:"category"`
-	Homepage             string   `json:"homepage"`
-	RepoURL              string   `json:"repoUrl"`
-	DocsURL              string   `json:"docsUrl"`
-	ReleaseURL           string   `json:"releaseUrl"`
-	ThemeColor           string   `json:"themeColor"`
-	LatestVersion        string   `json:"latestVersion"`
-	LatestVersionCode    int      `json:"latestVersionCode"`
-	LatestPublishedAt    int64    `json:"latestPublishedAt"`
-	ForceUpdate          bool     `json:"forceUpdate"`
-	UpdateLog            string   `json:"updateLog"`
-	ArtifactID           int      `json:"artifactID"`
-	ArtifactFormat       string   `json:"artifactFormat"`
-	ArtifactSize         int64    `json:"artifactSize"`
-	ArtifactSHA256       string   `json:"artifactSha256"`
-	MinOs                string   `json:"minOs"`
-	Installed            bool     `json:"installed"`
-	InstalledVersion     string   `json:"installedVersion"`
-	InstalledVersionCode int      `json:"installedVersionCode"`
-	HasUpdate            bool     `json:"hasUpdate"`
-	Running              bool     `json:"running"`
-	InstallPath          string   `json:"installPath"`
-	Duplicates           []string `json:"duplicates"`
+	AppKey               string        `json:"appKey"`
+	Name                 string        `json:"name"`
+	Description          string        `json:"description"`
+	IconURL              string        `json:"iconUrl"`
+	Category             string        `json:"category"`
+	Homepage             string        `json:"homepage"`
+	RepoURL              string        `json:"repoUrl"`
+	DocsURL              string        `json:"docsUrl"`
+	ReleaseURL           string        `json:"releaseUrl"`
+	ThemeColor           string        `json:"themeColor"`
+	Tagline              string        `json:"tagline"`
+	Features             []api.Feature `json:"features"`
+	Screenshots          []string      `json:"screenshots"`
+	LatestVersion        string        `json:"latestVersion"`
+	LatestVersionCode    int           `json:"latestVersionCode"`
+	LatestPublishedAt    int64         `json:"latestPublishedAt"`
+	ForceUpdate          bool          `json:"forceUpdate"`
+	UpdateLog            string        `json:"updateLog"`
+	ArtifactID           int           `json:"artifactID"`
+	ArtifactFormat       string        `json:"artifactFormat"`
+	ArtifactSize         int64         `json:"artifactSize"`
+	ArtifactSHA256       string        `json:"artifactSha256"`
+	MinOs                string        `json:"minOs"`
+	Installed            bool          `json:"installed"`
+	InstalledVersion     string        `json:"installedVersion"`
+	InstalledVersionCode int           `json:"installedVersionCode"`
+	HasUpdate            bool          `json:"hasUpdate"`
+	Running              bool          `json:"running"`
+	InstallPath          string        `json:"installPath"`
+	Duplicates           []string      `json:"duplicates"`
 }
 
 type CatalogView struct {
@@ -182,6 +185,9 @@ func (a *App) catalogLocked() (CatalogView, error) {
 			DocsURL:           app.DocsURL,
 			ReleaseURL:        app.ReleaseURL,
 			ThemeColor:        app.ThemeColor,
+			Tagline:           app.Tagline,
+			Features:          app.Features,
+			Screenshots:       app.Screenshots,
 			LatestVersion:     app.Latest.VersionName,
 			LatestVersionCode: app.Latest.VersionCode,
 			LatestPublishedAt: app.Latest.PublishedAt,

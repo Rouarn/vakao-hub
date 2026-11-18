@@ -21,6 +21,9 @@ export interface AppRow {
   docsUrl: string | null;
   releaseUrl: string | null;
   themeColor: string | null;
+  tagline: string | null;
+  features: Array<{ title: string; description: string }> | null;
+  screenshots: string[] | null;
   createdAt: number;
   updatedAt: number;
 }

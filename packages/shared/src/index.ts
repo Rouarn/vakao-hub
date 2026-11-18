@@ -68,6 +68,12 @@ export interface AppSummary {
   docsUrl: string | null;
   releaseUrl: string | null;
   themeColor: string | null;
+  /** 详情页一句话定位 */
+  tagline?: string | null;
+  /** 详情页功能点 */
+  features?: Array<{ title: string; description: string }> | null;
+  /** 详情页截图（有序，支持多图/将来轮播） */
+  screenshots?: string[] | null;
 }
 
 /** 产物摘要 */

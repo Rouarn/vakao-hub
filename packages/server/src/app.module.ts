@@ -16,6 +16,7 @@ import { ArtifactsModule } from './modules/artifacts/artifacts.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { MediaModule } from './modules/media/media.module.js';
 import { ReleasesModule } from './modules/releases/releases.module.js';
 import { StatsModule } from './modules/stats/stats.module.js';
 import { UpdatesModule } from './modules/updates/updates.module.js';
@@ -34,6 +35,7 @@ import { UpdatesModule } from './modules/updates/updates.module.js';
     AppsModule,
     ReleasesModule,
     ArtifactsModule,
+    MediaModule,
     UpdatesModule,
     CatalogModule,
     StatsModule,

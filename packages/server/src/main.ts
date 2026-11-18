@@ -44,6 +44,12 @@ async function bootstrap(): Promise<void> {
     maxAge: '1h',
     setHeaders: noCacheHtml,
   });
+  // 上传的图标与截图：内容指纹命名，可长期缓存
+  app.useStaticAssets(join(env.storageDir, 'media'), {
+    prefix: '/api/v1/media/',
+    maxAge: '365d',
+    immutable: true,
+  });
   app.useStaticAssets(join(env.webDir, 'admin'), {
     prefix: '/admin/',
     index: ['index.html'],
