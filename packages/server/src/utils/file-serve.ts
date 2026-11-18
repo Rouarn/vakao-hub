@@ -106,49 +106,6 @@ export async function serveFile(
   return true;
 }
 
-/**
- * 交给 Nginx 发文件：Node 只做存在性/条件请求判断，然后让 Nginx 用 sendfile 读取。
- * 响应头里带上 X-Accel-Redirect，Nginx 收到后内部改写到 storage 目录。
- */
-export async function serveViaAccel(
-  fullPath: string,
-  req: Request,
-  res: Response,
-  options: { fileName: string; etag: string; accelPrefix: string; relPath: string },
-): Promise<boolean> {
-  const info = await stat(fullPath);
-  const etag = `"${options.etag}"`;
-
-  res.setHeader('ETag', etag);
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Content-Type', mimeByFileName(options.fileName));
-  // 下载必须回到源站：否则 CDN 缓存会吞掉请求，下载计数与鉴权都会失准
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename*=UTF-8''${encodeURIComponent(basename(options.fileName))}`,
-  );
-
-  if (req.headers['if-none-match'] === etag) {
-    res.status(304).end();
-    return false;
-  }
-
-  // 长度与 Range 交给 Nginx；这里只给出内部路径，避免 Node 触碰字节流
-  res.setHeader('X-Accel-Redirect', `${options.accelPrefix}/${encodeRelPath(options.relPath)}`);
-  res.status(200).end();
-  return info.size > 0;
-}
-
-/** 按路径段做 URI 编码，交给 Nginx 的 alias 还原成文件路径 */
-function encodeRelPath(relPath: string): string {
-  return relPath
-    .split('/')
-    .filter((part) => part !== '' && part !== '.' && part !== '..')
-    .map((part) => encodeURIComponent(part))
-    .join('/');
-}
-
 /** 将文件流写入响应，并保证读错误不会变成未捕获异常导致进程退出 */
 function streamToResponse(
   stream: ReturnType<typeof createReadStream>,

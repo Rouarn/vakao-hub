@@ -1,173 +1,189 @@
-# 生产部署
+# 生产部署（宝塔面板）
 
-以下路径以 `/www/wwwroot/vakao-hub` 为例，按服务器实际目录调整。
+线上：下载页 <https://dist.woyuxiaji.cn>、管理端 <https://dist.woyuxiaji.cn/admin/>。
 
-## 1. 前置
+## 0. 架构总览
 
-- Node.js >= 22.18
-- pnpm（`corepack enable && corepack prepare pnpm@12.16.1 --activate`）
-- MySQL 8（本机或内网）
-- Nginx
-- 运行用户建议 `www`（宝塔默认），并确保对 `packages/server/storage` 有写权限
+**一个 Node 进程同时提供**：下载页、管理端、`/api` 接口、安装包下载。
+**Nginx 只做一件事**：把所有请求反代给这个 Node 进程。
 
-## 2. 数据库
-
-执行 [mysql-init.sql.example](mysql-init.sql.example)，创建库与专用账号（不要用 root 跑应用）。
-
-## 3. 构建
-
-```bash
-cd /www/wwwroot/vakao-hub
-pnpm install --frozen-lockfile
-pnpm build
+```
+浏览器 ──> Nginx (:80) ──proxy──> Node (:31888)
+                                   ├─ /            下载页（web/site）
+                                   ├─ /admin/      管理端（web/admin）
+                                   ├─ /api/v1/…   接口
+                                   └─ /api/v1/updates/download/:id  安装包（流式发送）
 ```
 
-## 4. 服务端配置
+这样只有一个进程要管、一个服务要重启，前后台不会再出现「改了 Nginx 忘了改另一边」的问题。
+
+## 1. 目录结构
+
+```
+/www/wwwroot/vakao-hub/
+├── app/             服务端
+│   ├── dist/         编译产物（node dist/main.js）
+│   ├── node_modules/
+│   ├── shared/       @vakao/hub-shared 构建产物（软链到 node_modules/@vakao/hub-shared）
+│   ├── package.json
+│   └── .env          运行配置
+├── web/
+│   ├── site/         下载页静态文件
+│   └── admin/        管理端 SPA
+├── storage/         安装包（按 appKey 分目录），70 MB 量级
+└── logs/            预留日志目录
+```
+
+安装包在 `storage/<appKey>/v<versionCode>_<versionName>/`，例如
+`storage/dockdeck/v100_1.0.0/darwin-arm64-dmg-DockDeck_1.0.0_arm64.dmg`。
+
+## 2. 前置
+
+- Node.js >= 22.18（线上为 v24.21.0）
+- MySQL 8（本机或内网均可）
+- Nginx（宝塔自带）
+- 运行用户 `www`，需对 `app/`、`storage/` 有读写权限
+
+## 3. 数据库
+
+执行 [mysql-init.sql.example](mysql-init.sql.example) 建库与专用账号（不要用 root 跑应用）。
+
+## 4. 构建（本地）
 
 ```bash
-cd packages/server
+cd vakao-hub
+pnpm install
+pnpm --filter @vakao/hub-shared build
+pnpm --filter @vakao/hub-server build
+ADMIN_BASE=/admin/ pnpm --filter @vakao/hub-admin build
+```
+
+产物：`packages/server/dist`、`packages/shared/dist`、`packages/admin/dist`、`packages/website`（纯静态）。
+
+## 5. 上传到服务器
+
+```bash
+rsync -az --delete packages/server/dist/   server:/www/wwwroot/vakao-hub/app/dist/
+rsync -az --delete packages/shared/dist/   server:/www/wwwroot/vakao-hub/app/shared/dist/
+rsync -az --delete packages/admin/dist/    server:/www/wwwroot/vakao-hub/web/admin/
+rsync -az --delete packages/website/       server:/www/wwwroot/vakao-hub/web/site/
+ssh server 'chown -R www:www /www/wwwroot/vakao-hub'
+```
+
+依赖只在首次部署或 `package.json` 变化时需要：把 `node_modules` 拷过去，或在 `app/` 下 `npm ci --omit=dev`。
+
+## 6. 服务端配置（`app/.env`）
+
+```bash
 cp .env.production.example .env
-# 修改 JWT_SECRET、ADMIN_PASSWORD、DB_*、PUBLIC_BASE_URL、CORS_ORIGINS
 chmod 600 .env
 ```
 
-硬性要求：
+必改/必查：
 
-- `NODE_ENV=production`
-- `DB_SYNCHRONIZE=false`
-- `JWT_SECRET` ≥ 32 字符
-- `ADMIN_PASSWORD` ≥ 8 位
-- `PUBLIC_BASE_URL` 为对外 HTTPS 地址（不带 `/api`）
-- `CORS_ORIGINS` 显式列出管理端域名（下载页与 API 同域时可不加）
-
-## 5. 迁移
-
-```bash
-cd packages/server
-pnpm migrate:run
-```
-
-迁移脚本会先编译到 `dist/database/migrations`，再执行未应用的迁移；回滚用 `pnpm migrate:revert`。
-迁移文件按列/表检测是否已存在，因此对「synchronize 建过的开发库」和「全新生产库」两种路径都可安全执行：前者跳过已有列并补齐迁移记录，后者建表后按需补列。
-
-
-## 目录约定
-
-```
-/www/wwwroot/vakaohub/
-├── app/      服务端（dist、node_modules、shared、package.json、.env）
-├── web/
-│   ├── site/   下载页
-│   └── admin/  管理端
-├── storage/  安装包，按 appKey 分
-└── logs/
-```
-
-- 前台、后台、API 由**同一个 Node 进程**提供；Nginx 只做整体反代
-- 下载产物用 `X-Accel-Redirect`：Node 判断权限与计数，Nginx 用 `sendfile` 发送
-- `.env` 里与目录相关的三项：`WEB_DIR=/www/wwwroot/vakaohub/web`、`STORAGE_DIR=/www/wwwroot/vakaohub/storage`、`ACCEL_PREFIX=/_files`
-
-## 6. 进程托管（宝塔 Node 项目）
-
-本项目用**宝塔面板**托管 API 进程，不使用 systemd、不写服务单元。
-
-宝塔 → 网站 → Node 项目 → 添加 Node 项目：
-
-| 项 | 值 |
+| 键 | 说明 |
 | --- | --- |
-| 项目目录 | `/www/wwwroot/Vakao-hub/app/packages/server` |
-| 启动选项 | `dist/main.js` |
-| Node 版本 | v24（与生产一致） |
-| 项目端口 | `3000` |
-| 运行用户 | `www` |
-| 守护 | 面板默认用 PM2 守护，勾选开机自启 |
+| `NODE_ENV` | `production` |
+| `PORT` | `31888`（与宝塔 Node 项目端口一致） |
+| `WEB_DIR` | `/www/wwwroot/vakao-hub/web` |
+| `STORAGE_DIR` | `/www/wwwroot/vakao-hub/storage` |
+| `DB_*` | 数据库连接，`DB_SYNCHRONIZE=false` |
+| `JWT_SECRET` | ≥ 32 字符 |
+| `ADMIN_PASSWORD` | ≥ 8 位 |
+| `PUBLIC_BASE_URL` | 对外 HTTPS 地址，不带 `/api` |
+| `CORS_ORIGINS` | 同域部署时可不填 |
 
-- 环境变量：程序自己读同目录 `.env`，宝塔里不必重复填。
-- 更新代码：上传新的 `dist` 与 `shared/dist` 后，在面板点「重启」即可。
-- 日志、崩溃重启、启停都在面板里操作，不需要命令行。
+生产环境会硬校验占位值，示例里的 `replace-with-…` 会导致启动失败。
 
-## 7. Nginx
-
-管理端与下载页同域部署时，后台放在 `/admin/`：
+## 7. 数据库迁移
 
 ```bash
-ADMIN_BASE=/admin/ pnpm --filter @vakao/hub-admin build
-# 把 packages/admin/dist 放到站点根下的 admin/ 目录
+cd /www/wwwroot/vakao-hub/app
+node scripts/migrate.mjs
 ```
 
-Nginx 增加：
+迁移按列/表检测是否已存在，对「synchronize 建过的开发库」和「全新库」都安全。
+
+## 8. Nginx（宝塔站点 → 设置 → 配置文件）
+
+整个站点只有两段：
 
 ```nginx
-location = /admin { return 301 /admin/; }
-location /admin/ { try_files $uri $uri/ /admin/index.html; }
-location ^~ /api/ { proxy_pass http://127.0.0.1:3000; }
-location ^~ /app/ { return 404; }
+# API 不缓存：下载计数与实时数据都要求请求回到源站
+location ^~ /api/ {
+    proxy_pass http://127.0.0.1:31888;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_hide_header Cache-Control;
+    add_header Cache-Control "no-store" always;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:31888;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
 ```
 
-`/app/` 用于服务端代码与 storage，必须禁止直接访问。
+站点根目录填 `/www/wwwroot/vakao-hub`（实际不用于静态托管，仅占位），上传上限 `client_max_body_size 2g`。
 
+HTTPS 用宝塔「SSL」申请，再开「强制 HTTPS」；挡在前面的是 EdgeOne CDN。
 
-配置写在**宝塔站点**里：网站 → 设置 → 配置文件，粘贴 `deploy/nginx.conf.example` 里对应的 `location` 段，保存时面板会自动校验并重载 Nginx。
+## 9. 进程托管（宝塔 Node 项目）
 
-- 主站：下载页静态文件 + `/api/` 反代；
-- 管理端：单独子域，静态文件 + `/api/` 反代；
-- 上传上限在站点配置里设为 2g，与 `UPLOAD_MAX_BYTES` 保持一致；
-- HTTPS 用宝塔「SSL」一键申请，再开「强制 HTTPS」。
+宝塔 → 网站 → Node 项目 → 添加：
 
-## 8. 备份
+| 字段 | 值 |
+| --- | --- |
+| 项目名称 | `vakao-hub` |
+| 项目目录 | `/www/wwwroot/vakao-hub/app` |
+| 项目端口 | `31888` |
+| 启动方式 | node → `dist/main.js` |
+| Node 版本 | v24.21.0 |
+| 运行用户 | `www` |
+| 安装依赖 | 否（已就绪） |
+| 守护进程 / 开机自启 | 勾上 |
 
-用宝塔的**计划任务**跑，不用手写 crontab：
+日志：`/www/wwwlogs/nodejs/vakao-hub.log`（启动、迁移与运行时输出）。
 
-计划任务 → 添加任务 → 类型「Shell 脚本」→ 周期「每天 3:30」：
+更新代码后在面板点「重启」即可，不需要动 Nginx。
+
+## 10. 备份
+
+宝塔 → 计划任务 → Shell 脚本，每天 3:30：
 
 ```bash
-/www/wwwroot/Vakao-hub/deploy/backup.sh >> /var/log/vakaohub-backup.log 2>&1
+/www/wwwroot/vakao-hub/app/../../deploy/backup.sh >> /var/log/vakaohub-backup.log 2>&1
 ```
 
-脚本已按 `RETENTION_DAYS`（默认 7 天）清理旧包，产物落在 `/www/backup/vakaohub`。
+脚本备份数据库与 `storage/`，默认保留 7 天，产物在 `/www/backup/vakaohub`。
+（脚本里的 `VAKAO_HUB_ROOT` 需指向 `/www/wwwroot/vakao-hub`。）
 
-备份包含 `mysqldump` 与 `storage/` 目录，默认保留 7 天，可用 `BACKUP_DIR` 覆盖目录。
+## 11. 日常发布
 
-## 9. 升级流程
+- 发版：各项目的 `ship.sh` 直接调 `tools/hub-cli.mjs` 推产物，不经服务器
+- 改服务端：按第 4、5 步构建上传，再在宝塔里重启 Node 项目
+- 改前端：`ADMIN_BASE=/admin/` 重新构建 admin，或直接更新 `web/site`
 
-```bash
-cd /www/wwwroot/vakao-hub
-git pull
-pnpm install --frozen-lockfile
-pnpm build
-cd packages/server && pnpm migrate:run
-systemctl restart vakaohub
-```
+## 12. 排障
 
-## 10. 上线检查清单
-
-- [ ] `.env` 权限 600，未入库
-- [ ] `DB_SYNCHRONIZE=false`，迁移已执行
-- [ ] JWT_SECRET / ADMIN_PASSWORD 已替换，管理员密码已通过后台改密
-- [ ] `PUBLIC_BASE_URL`、`CORS_ORIGINS` 为真实域名
-- [ ] 3000 端口只监听本机或由防火墙封禁
-- [ ] Nginx `client_max_body_size` ≥ 上传上限
-- [ ] 下载页与管理端均强制 HTTPS
-- [ ] `storage/` 有写权限，磁盘余量足够
-- [ ] 备份任务已生效，且实际还原过一次
-- [ ] 监控 `/api/v1/health`（返回 503 表示数据库不可用）
-
-## macOS 打包与上传
-
-macOS 在复制/打包带扩展属性的文件时会生成 `._*` AppleDouble 元数据文件；它们不是代码，也不是重复文件，但不应部署到服务器。
-
-部署前清理：
-
-```bash
-find /www/wwwroot/Vakao-hub -name '._*' -delete
-find /www/wwwroot/Vakao-hub -name '.DS_Store' -delete
-```
-
-本机打包时排除：
-
-```bash
-COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude='._*' --exclude='.DS_Store' -czf dist.tgz <目录>
-ditto -c -k --keepParent --norsrc --noextattr VaKaoHub.app VaKaoHub.zip
-```
-
-不要删除站点根目录的 `.user.ini` 和 `.htaccess`：它们是宝塔/PHP 的运行配置，与 AppleDouble 无关。
+| 现象 | 先看 |
+| --- | --- |
+| 全站 502 | Node 项目是否在运行、`/www/wwwlogs/nodejs/vakao-hub.log` |
+| `/api` 正常但页面 404 | `web/site`、`web/admin` 是否上传到位 |
+| 下载 404 | `STORAGE_DIR` 与实际目录是否一致、`storage/<appKey>/…` 是否存在 |
+| 下载计数不涨 | 是否被 CDN 缓存（响应头应为 `Cache-Control: no-store`） |

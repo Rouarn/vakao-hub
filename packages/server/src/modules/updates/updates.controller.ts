@@ -14,8 +14,7 @@ import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/public.decorator.js';
 import { resolveStoragePath } from '../../utils/paths.js';
-import { serveFile, serveViaAccel } from '../../utils/file-serve.js';
-import { env } from '../../config/env.js';
+import { serveFile } from '../../utils/file-serve.js';
 import { CheckUpdateQueryDto } from './dto/check-update-query.dto.js';
 import { DownloadArtifactQueryDto } from './dto/download-artifact-query.dto.js';
 import { ReportEventDto } from './dto/report-event.dto.js';
@@ -51,15 +50,10 @@ export class UpdatesController {
 
     let served = false;
     try {
-      const etag = `hub-${artifact.id}-${artifact.sha256.slice(0, 16)}`;
-      served = env.accelPrefix
-        ? await serveViaAccel(fullPath, req, res, {
-            fileName: artifact.fileName,
-            etag,
-            accelPrefix: env.accelPrefix,
-            relPath: artifact.relPath,
-          })
-        : await serveFile(fullPath, req, res, { fileName: artifact.fileName, etag });
+      served = await serveFile(fullPath, req, res, {
+        fileName: artifact.fileName,
+        etag: `hub-${artifact.id}-${artifact.sha256.slice(0, 16)}`,
+      });
     } catch {
       if (!res.headersSent) {
         throw new NotFoundException('安装包文件缺失');
