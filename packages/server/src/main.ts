@@ -16,6 +16,9 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // 前面还有 Nginx 与 CDN，取 X-Forwarded-For 里的真实来源
+  app.set('trust proxy', true);
+
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,

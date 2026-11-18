@@ -20,6 +20,27 @@ import { DownloadArtifactQueryDto } from './dto/download-artifact-query.dto.js';
 import { ReportEventDto } from './dto/report-event.dto.js';
 import { UpdatesService } from './updates.service.js';
 
+/**
+ * 下载计数去重：CDN 回源有时会对同一次下载发起两次请求（先中断、再整包重取），
+ * 同一产物 + 同一来源 IP 在短窗口内只计一次，避免统计翻倍。
+ */
+const RECENT_DOWNLOAD_MS = 10_000;
+const recentDownloads = new Map<string, number>();
+
+function shouldCountDownload(artifactId: number, ip: string): boolean {
+  const key = `${artifactId}:${ip}`;
+  const now = Date.now();
+  const last = recentDownloads.get(key);
+  if (last !== undefined && now - last < RECENT_DOWNLOAD_MS) return false;
+  recentDownloads.set(key, now);
+  if (recentDownloads.size > 5000) {
+    for (const [k, v] of recentDownloads) {
+      if (now - v >= RECENT_DOWNLOAD_MS) recentDownloads.delete(k);
+    }
+  }
+  return true;
+}
+
 @ApiTags('客户端 · 更新')
 @Controller('updates')
 export class UpdatesController {
@@ -61,7 +82,12 @@ export class UpdatesController {
     }
 
     // 只在真正开始传输完整文件时计数：304/416 不算下载，断点续传的分段请求也不重复计数
-    if (served && req.method === 'GET' && !req.headers.range) {
+    if (
+      served &&
+      req.method === 'GET' &&
+      !req.headers.range &&
+      shouldCountDownload(id, req.ip ?? 'unknown')
+    ) {
       await this.updatesService.countDownload(id).catch(() => undefined);
     }
   }

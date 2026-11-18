@@ -158,7 +158,13 @@ HTTPS 用宝塔「SSL」申请，再开「强制 HTTPS」；挡在前面的是 E
 | 安装依赖 | 否（已就绪） |
 | 守护进程 / 开机自启 | 勾上 |
 
-日志：`/www/wwwlogs/nodejs/vakao-hub.log`（启动、迁移与运行时输出）。
+日志实际由宝塔写入 `/www/wwwlogs/nodejs/vakao-hub.log`（启动、迁移与运行时输出）。
+为了在项目目录里也能直接看，`logs/vakao-hub.log` 是指向它的软链：
+
+```bash
+ln -sfn /www/wwwlogs/nodejs/vakao-hub.log /www/wwwroot/vakao-hub/logs/vakao-hub.log
+tail -f /www/wwwroot/vakao-hub/logs/vakao-hub.log
+```
 
 更新代码后在面板点「重启」即可，不需要动 Nginx。
 
@@ -187,3 +193,4 @@ HTTPS 用宝塔「SSL」申请，再开「强制 HTTPS」；挡在前面的是 E
 | `/api` 正常但页面 404 | `web/site`、`web/admin` 是否上传到位 |
 | 下载 404 | `STORAGE_DIR` 与实际目录是否一致、`storage/<appKey>/…` 是否存在 |
 | 下载计数不涨 | 是否被 CDN 缓存（响应头应为 `Cache-Control: no-store`） |
+| 下载计数翻倍 | EdgeOne 偶尔对同一次下载回源两次；服务端已按「产物 + 来源 IP + 10 秒」去重 |
