@@ -3,7 +3,7 @@
     :show="show"
     preset="card"
     :title="editing ? '编辑应用' : '新建应用'"
-    style="width: 780px; max-height: 82vh"
+    style="width: 780px"
     :bordered="false"
     @update:show="$emit('update:show', $event)"
   >
@@ -11,6 +11,7 @@
       <span class="modal-hint">{{ editing ? editing.appKey : '新建后 appKey 不可修改' }}</span>
     </template>
 
+    <div class="app-modal-body">
     <n-tabs v-model:value="tab" type="line" animated pane-style="padding-top: 14px">
       <n-tab-pane name="basic" tab="基础信息">
         <div class="field-grid">
@@ -94,6 +95,7 @@
         </div>
       </n-tab-pane>
     </n-tabs>
+    </div>
 
     <template #footer>
       <div class="modal-footer">
@@ -261,6 +263,11 @@ async function save(): Promise<void> {
 </script>
 
 <style scoped>
+.app-modal-body {
+  max-height: min(66vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .modal-hint {
   font-size: 12px;
   opacity: 0.55;
@@ -271,13 +278,13 @@ async function save(): Promise<void> {
   column-gap: 18px;
 }
 .field-grid :deep(.n-form-item) {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 .span-2 {
   grid-column: span 2;
 }
 .field-stack :deep(.n-form-item) {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 .theme-row {
   display: flex;
