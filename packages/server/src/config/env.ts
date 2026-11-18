@@ -82,6 +82,15 @@ export const env = {
   },
 
   storageDir: resolve(process.cwd(), process.env.STORAGE_DIR ?? 'storage'),
+
+  /**
+   * 下载走 Nginx 的 X-Accel-Redirect 前缀（如 /_files）。
+   * 留空则退化为 Node 自己流式发送，便于本地开发。
+   */
+  accelPrefix: (process.env.ACCEL_PREFIX ?? '').trim(),
+
+  /** 静态站点根目录：其下 site/ 为下载页，admin/ 为管理端。 */
+  webDir: resolve(process.cwd(), process.env.WEB_DIR ?? 'web'),
   uploadMaxBytes: toInt(process.env.UPLOAD_MAX_BYTES, 2 * 1024 * 1024 * 1024),
 
   events: {

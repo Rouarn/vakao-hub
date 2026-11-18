@@ -1,68 +1,31 @@
-# VaKao Hub Nginx 示例
-# 替换 dist.example.com / admin.example.com 与目录后使用。
+# VaKao Hub 的 Nginx 配置（宝塔站点里粘贴到「配置文件」）
+#
+# 前台、后台、API 全部由同一个 Node 进程提供，所以这里只做一件事：整体反代。
+# 下载产物额外走 X-Accel-Redirect：Node 负责鉴权与计数，Nginx 负责发字节。
 
-# 主站：下载页 + API
 server {
     listen 80;
     server_name dist.example.com;
 
-    root /www/wwwroot/vakao-hub/packages/website;
-    index index.html;
     client_max_body_size 2g;
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:3000;
+    # 下载产物：internal 表示只能被内部的 X-Accel-Redirect 命中，
+    # 外部直接访问 /_files/... 会 404。
+    location /_files/ {
+        internal;
+        alias /www/wwwroot/vakaohub/storage/;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:31888;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # 大包上传/下载：关闭请求体缓冲，放宽超时
         proxy_request_buffering off;
         proxy_buffering off;
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
     }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location ~* \.(css|js|png|svg|ico|woff2?)$ {
-        expires 7d;
-        add_header Cache-Control "public";
-        try_files $uri =404;
-    }
 }
-
-# 管理端：独立子域，静态文件 + API
-server {
-    listen 80;
-    server_name admin.example.com;
-
-    root /www/wwwroot/vakao-hub/packages/admin/dist;
-    index index.html;
-    client_max_body_size 2g;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_request_buffering off;
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-
-# HTTPS：用 certbot 或宝塔申请证书后，把上面的 80 端口 server 改为 443 ssl，
-# 并加 80 -> 443 跳转。申请前先确保域名解析到本机且 80 端口可访问。

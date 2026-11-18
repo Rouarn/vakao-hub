@@ -7,7 +7,6 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "start:prod": "node dist/main.js",
     "migrate": "pnpm build && node scripts/migrate.mjs",
     "migrate:run": "node scripts/migrate.mjs",
     "migrate:revert": "node scripts/migrate-revert.mjs",

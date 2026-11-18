@@ -1,6 +1,8 @@
 import 'reflect-metadata';
+import { join } from 'node:path';
 import { Logger, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import cors from 'cors';
@@ -12,7 +14,7 @@ import { ensureStorage } from './utils/paths.js';
 async function bootstrap(): Promise<void> {
   await ensureStorage();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.setGlobalPrefix('api');
   app.enableVersioning({
@@ -29,6 +31,22 @@ async function bootstrap(): Promise<void> {
   );
   app.use(compression());
   app.use(cors({ origin: env.corsOrigins, credentials: false }));
+
+  // 前台与后台由同一个进程托管，Nginx 只需要整体反代到本服务
+  const noCacheHtml = (res: import('express').Response, path: string): void => {
+    if (path.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  };
+  app.useStaticAssets(join(env.webDir, 'site'), {
+    index: ['index.html'],
+    maxAge: '1h',
+    setHeaders: noCacheHtml,
+  });
+  app.useStaticAssets(join(env.webDir, 'admin'), {
+    prefix: '/admin/',
+    index: ['index.html'],
+    maxAge: '1h',
+    setHeaders: noCacheHtml,
+  });
 
   // 生产环境默认关闭 Swagger，避免暴露内部接口结构
   if (!env.isProduction) {

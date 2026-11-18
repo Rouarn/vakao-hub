@@ -50,6 +50,23 @@ pnpm migrate:run
 迁移脚本会先编译到 `dist/database/migrations`，再执行未应用的迁移；回滚用 `pnpm migrate:revert`。
 迁移文件按列/表检测是否已存在，因此对「synchronize 建过的开发库」和「全新生产库」两种路径都可安全执行：前者跳过已有列并补齐迁移记录，后者建表后按需补列。
 
+
+## 目录约定
+
+```
+/www/wwwroot/vakaohub/
+├── app/      服务端（dist、node_modules、shared、package.json、.env）
+├── web/
+│   ├── site/   下载页
+│   └── admin/  管理端
+├── storage/  安装包，按 appKey 分
+└── logs/
+```
+
+- 前台、后台、API 由**同一个 Node 进程**提供；Nginx 只做整体反代
+- 下载产物用 `X-Accel-Redirect`：Node 判断权限与计数，Nginx 用 `sendfile` 发送
+- `.env` 里与目录相关的三项：`WEB_DIR=/www/wwwroot/vakaohub/web`、`STORAGE_DIR=/www/wwwroot/vakaohub/storage`、`ACCEL_PREFIX=/_files`
+
 ## 6. 进程托管（宝塔 Node 项目）
 
 本项目用**宝塔面板**托管 API 进程，不使用 systemd、不写服务单元。
