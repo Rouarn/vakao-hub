@@ -9,8 +9,6 @@
 三端共用一套「纸面 / 墨色 / 四色星芒」的设计语言，令牌与参考见 [`docs/design-system.md`](docs/design-system.md)。
 
 - 启动器：`packages/launcher/docs/screenshot-macos.png`
-- 管理后台：`packages/admin/docs/screenshot-dashboard.png`
-- 下载站：`packages/website/docs/screenshot-home.png`
 
 ## 与其它项目的关系
 
