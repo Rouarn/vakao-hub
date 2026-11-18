@@ -95,9 +95,9 @@
               <div><span class="hud">架构</span><strong>{{ arch }}</strong></div>
             </div>
             <div class="settings-links">
-              <button @click="$emit('open-url', 'https://github.com/Rouarn/VakaoHub')">GitHub ↗</button>
-              <button @click="$emit('open-url', 'https://github.com/Rouarn/VakaoHub/releases')">版本发布 ↗</button>
-              <button @click="$emit('open-url', 'https://github.com/Rouarn/VakaoHub#readme')">帮助文档 ↗</button>
+              <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub')">GitHub ↗</button>
+              <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub/releases')">版本发布 ↗</button>
+              <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub#readme')">帮助文档 ↗</button>
             </div>
           </section>
         </div>
