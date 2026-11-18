@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// eslint-disable-next-line no-unused-vars
 /**
  * vakao-hub 发布 CLI：构建完一条命令把产物推到软件中心。
  *

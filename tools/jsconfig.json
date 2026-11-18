@@ -1,0 +1,12 @@
+{
+  "//": "tools 下是 Node 脚本，编辑器不必做类型检查；只声明环境，避免 'process/fetch/console is not defined' 的红线",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true
+  },
+  "include": ["**/*.mjs"]
+}
