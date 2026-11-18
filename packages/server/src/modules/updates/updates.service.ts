@@ -217,19 +217,20 @@ export class UpdatesService {
       sha256: artifact.sha256,
       minOs: artifact.minOs,
       notarized: artifact.notarized === 1,
-      downloadUrl: this.buildDownloadUrl(req, artifact.id, deviceId),
+      downloadUrl: this.buildDownloadUrl(req, artifact, deviceId),
     };
   }
 
   private buildDownloadUrl(
     req: Request,
-    artifactId: number,
+    artifact: { id: number; sha256: string },
     deviceId?: string,
   ): string {
-    const path = `api/v1/updates/download/${artifactId}`;
-    const query = deviceId
-      ? `?deviceId=${encodeURIComponent(deviceId)}`
-      : '';
+    const path = `api/v1/updates/download/${artifact.id}`;
+    // v= 内容指纹：产物变了 URL 就变，天然绕开 CDN 上的历史缓存
+    const params = new URLSearchParams({ v: artifact.sha256.slice(0, 8) });
+    if (deviceId) params.set('deviceId', deviceId);
+    const query = `?${params.toString()}`;
     if (env.publicBaseUrl) return `${env.publicBaseUrl}/${path}${query}`;
 
     const proto =

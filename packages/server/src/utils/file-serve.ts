@@ -65,7 +65,7 @@ export async function serveFile(
   res.setHeader('Content-Type', mimeByFileName(options.fileName));
   res.setHeader(
     'Cache-Control',
-    options.cacheControl ?? 'public, max-age=31536000, immutable',
+    options.cacheControl ?? 'no-store',
   );
   res.setHeader(
     'Content-Disposition',
@@ -122,7 +122,8 @@ export async function serveViaAccel(
   res.setHeader('ETag', etag);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Type', mimeByFileName(options.fileName));
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  // 下载必须回到源站：否则 CDN 缓存会吞掉请求，下载计数与鉴权都会失准
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader(
     'Content-Disposition',
     `attachment; filename*=UTF-8''${encodeURIComponent(basename(options.fileName))}`,
