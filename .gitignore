@@ -15,6 +15,4 @@ coverage/
 
 # Wails 构建产物
 packages/launcher/build/bin/
-!packages/launcher/frontend/dist/
 packages/launcher/frontend/dist/*
-!packages/launcher/frontend/dist/.gitkeep

@@ -155,7 +155,7 @@ pnpm website   # http://localhost:5200
 
 - 迁移：`cd packages/server && pnpm migrate`；回滚 `pnpm migrate:revert`
 - 生产配置：复制 `packages/server/.env.production.example`，`DB_SYNCHRONIZE=false`，JWT/管理员密码必须替换
-- 部署模板：`deploy/` 提供 systemd、Nginx、MySQL 初始化与备份脚本
+- 部署模板：`deploy/` 提供宝塔部署步骤、Nginx 片段、MySQL 初始化与备份脚本
 - 管理端部署在 `/admin/` 时构建：`ADMIN_BASE=/admin/ pnpm --filter @vakao/hub-admin build`
 - 生产路径：站点 `/www/wwwroot/Vakao-hub`、服务端 `/www/wwwroot/Vakao-hub/app`、后台 `/www/wwwroot/Vakao-hub/admin`
 - 完整步骤与上线检查清单见 [deploy/README.md](deploy/README.md)
@@ -172,7 +172,7 @@ pnpm website   # http://localhost:5200
 - [x] 桌面启动器 MVP（Wails：目录/下载/SHA-256/DMG 安装/启动）
 - [x] 真实应用接入：WireDeck 1.0.2（macOS）、点墨 0.1.0（Android）
 - [x] 管理员改密与事件漏斗看板
-- [x] 数据库迁移、生产环境硬校验与部署模板（systemd/Nginx/备份）
+- [x] 数据库迁移、生产环境硬校验与部署模板（宝塔/Nginx/备份）
 - [ ] Windows 安装链路验证（CI 工作流已提供，尚未在 Windows 上实跑）
 - [x] 实际服务器上线：https://dist.woyuxiaji.cn、管理端 /admin/、每日 3:30 备份
 - [ ] 备份异地存放与恢复演练

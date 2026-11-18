@@ -50,15 +50,24 @@ pnpm migrate:run
 迁移脚本会先编译到 `dist/database/migrations`，再执行未应用的迁移；回滚用 `pnpm migrate:revert`。
 迁移文件按列/表检测是否已存在，因此对「synchronize 建过的开发库」和「全新生产库」两种路径都可安全执行：前者跳过已有列并补齐迁移记录，后者建表后按需补列。
 
-## 6. systemd
+## 6. 进程托管（宝塔 Node 项目）
 
-```bash
-cp deploy/vakaohub.service /etc/systemd/system/vakaohub.service
-# 按需修改 User / WorkingDirectory / EnvironmentFile / node 路径
-systemctl daemon-reload
-systemctl enable --now vakaohub
-systemctl status vakaohub
-```
+本项目用**宝塔面板**托管 API 进程，不使用 systemd、不写服务单元。
+
+宝塔 → 网站 → Node 项目 → 添加 Node 项目：
+
+| 项 | 值 |
+| --- | --- |
+| 项目目录 | `/www/wwwroot/Vakao-hub/app/packages/server` |
+| 启动选项 | `dist/main.js` |
+| Node 版本 | v24（与生产一致） |
+| 项目端口 | `3000` |
+| 运行用户 | `www` |
+| 守护 | 面板默认用 PM2 守护，勾选开机自启 |
+
+- 环境变量：程序自己读同目录 `.env`，宝塔里不必重复填。
+- 更新代码：上传新的 `dist` 与 `shared/dist` 后，在面板点「重启」即可。
+- 日志、崩溃重启、启停都在面板里操作，不需要命令行。
 
 ## 7. Nginx
 
@@ -81,24 +90,24 @@ location ^~ /app/ { return 404; }
 `/app/` 用于服务端代码与 storage，必须禁止直接访问。
 
 
-```bash
-cp deploy/nginx.conf.example /etc/nginx/conf.d/vakaohub.conf
-# 修改 server_name、root、代理端口
-nginx -t && systemctl reload nginx
-```
+配置写在**宝塔站点**里：网站 → 设置 → 配置文件，粘贴 `deploy/nginx.conf.example` 里对应的 `location` 段，保存时面板会自动校验并重载 Nginx。
 
 - 主站：下载页静态文件 + `/api/` 反代；
 - 管理端：单独子域，静态文件 + `/api/` 反代；
-- 上传上限已设为 2g，与 `UPLOAD_MAX_BYTES` 保持一致；
-- HTTPS 用 certbot 或宝塔申请证书，申请后把 80 端口跳转到 443。
+- 上传上限在站点配置里设为 2g，与 `UPLOAD_MAX_BYTES` 保持一致；
+- HTTPS 用宝塔「SSL」一键申请，再开「强制 HTTPS」。
 
 ## 8. 备份
 
+用宝塔的**计划任务**跑，不用手写 crontab：
+
+计划任务 → 添加任务 → 类型「Shell 脚本」→ 周期「每天 3:30」：
+
 ```bash
-chmod +x deploy/backup.sh
-# crontab -e，例如每天 3:30
-30 3 * * * /www/wwwroot/vakao-hub/deploy/backup.sh >> /var/log/vakaohub-backup.log 2>&1
+/www/wwwroot/Vakao-hub/deploy/backup.sh >> /var/log/vakaohub-backup.log 2>&1
 ```
+
+脚本已按 `RETENTION_DAYS`（默认 7 天）清理旧包，产物落在 `/www/backup/vakaohub`。
 
 备份包含 `mysqldump` 与 `storage/` 目录，默认保留 7 天，可用 `BACKUP_DIR` 覆盖目录。
 
