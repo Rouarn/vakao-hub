@@ -8,7 +8,7 @@
         </div>
       </template>
 
-      <div class="drawer-body">
+      <div ref="bodyRef" class="drawer-body">
         <section class="group">
           <h4>基础信息</h4>
           <div class="grid">
@@ -111,7 +111,7 @@ import {
   NInput,
   useMessage,
 } from 'naive-ui';
-import { reactive, ref, watch } from 'vue';
+import { nextTick, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
 import type { AppRow } from '@/api/types';
 import MediaUploader from './MediaUploader.vue';
@@ -128,6 +128,7 @@ const emit = defineEmits<{
 
 const message = useMessage();
 const saving = ref(false);
+const bodyRef = ref<HTMLElement | null>(null);
 const themeAuto = ref(true);
 const themeSwatches = ['#5FBEDC', '#F0995F', '#A27FC2', '#EDDF55', '#D5B84A', '#171512'];
 const autoPalette = ['#5FBEDC', '#F0995F', '#A27FC2', '#EDDF55'];
@@ -197,7 +198,12 @@ function fill(row: AppRow | null): void {
 watch(
   () => [props.show, props.editing] as const,
   ([visible]) => {
-    if (visible) fill(props.editing);
+    if (!visible) return;
+    fill(props.editing);
+    // 每次打开都回到顶部，避免沿用上一次的滚动位置
+    void nextTick(() => {
+      if (bodyRef.value) bodyRef.value.scrollTop = 0;
+    });
   },
   { immediate: true },
 );

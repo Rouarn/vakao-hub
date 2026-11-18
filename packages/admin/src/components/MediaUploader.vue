@@ -1,40 +1,63 @@
 <template>
-  <div class="media-uploader">
-    <div v-if="items.length" class="media-grid">
-      <div v-for="(item, index) in items" :key="item" class="media-item">
-        <img :src="item" alt="" />
-        <div class="media-actions">
-          <button v-if="multiple && index > 0" title="左移" @click="move(index, -1)">←</button>
-          <button v-if="multiple && index < items.length - 1" title="右移" @click="move(index, 1)">→</button>
-          <button title="移除" @click="removeAt(index)">✕</button>
+  <div class="media">
+    <!-- 图标：单个方块，点击上传，悬停出操作 -->
+    <template v-if="!multiple">
+      <div class="icon-slot" :class="{ empty: !items.length }" @click="pick">
+        <img v-if="items.length" :src="items[0]" alt="" />
+        <span v-else class="hint">点击上传</span>
+        <div v-if="items.length" class="slot-actions">
+          <span @click.stop="pick">更换</span>
+          <span class="sep">·</span>
+          <span @click.stop="removeAt(0)">移除</span>
         </div>
       </div>
+    </template>
+
+    <!-- 截图：缩略图网格 + 加号卡片 -->
+    <template v-else>
+      <div class="shots">
+        <div v-for="(item, index) in items" :key="item" class="shot">
+          <img :src="item" alt="" />
+          <div class="shot-actions">
+            <button v-if="index > 0" title="左移" @click="move(index, -1)">‹</button>
+            <button v-if="index < items.length - 1" title="右移" @click="move(index, 1)">›</button>
+            <button title="移除" @click="removeAt(index)">✕</button>
+          </div>
+        </div>
+        <button v-if="items.length < 12" class="shot add" :disabled="uploading" @click="pick">
+          <span>{{ uploading ? '上传中' : '+' }}</span>
+        </button>
+      </div>
+    </template>
+
+    <input
+      ref="input"
+      type="file"
+      :multiple="multiple"
+      accept="image/png,image/jpeg,image/webp"
+      hidden
+      @change="onPick"
+    />
+
+    <div class="foot">
+      <button class="link-toggle" type="button" @click="showUrl = !showUrl">
+        {{ showUrl ? '收起外链' : '用外链' }}
+      </button>
+      <span class="tip">PNG / JPEG / WebP，单张 ≤ 5MB</span>
     </div>
 
-    <n-upload
-      :show-file-list="false"
-      :custom-request="upload"
-      accept="image/png,image/jpeg,image/webp"
-      :disabled="uploading || (!multiple && items.length >= 1)"
-    >
-      <n-button size="small" :loading="uploading">
-        {{ multiple ? '上传截图' : items.length ? '替换图标' : '上传图标' }}
-      </n-button>
-    </n-upload>
-
     <n-input
-      :value="manualUrl"
+      v-if="showUrl"
       size="small"
-      placeholder="或直接填外链 https://..."
+      placeholder="粘贴图片地址，回车添加"
       style="margin-top: 8px"
-      @update:value="onManualUrl"
+      @keyup.enter="addUrl"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { NButton, NInput, NUpload, useMessage } from 'naive-ui';
-import type { UploadCustomRequestOptions } from 'naive-ui';
+import { NInput, useMessage } from 'naive-ui';
 import { computed, ref } from 'vue';
 import { api } from '../api';
 
@@ -51,17 +74,46 @@ const emit = defineEmits<{
 
 const message = useMessage();
 const uploading = ref(false);
+const showUrl = ref(false);
+const input = ref<HTMLInputElement | null>(null);
 
 const items = computed<string[]>(() => {
   if (!props.modelValue) return [];
   return Array.isArray(props.modelValue) ? props.modelValue : [props.modelValue];
 });
 
-const manualUrl = ref('');
-
 function commit(next: string[]): void {
   if (props.multiple) emit('update:modelValue', next);
   else emit('update:modelValue', next[0] ?? null);
+}
+
+function pick(): void {
+  if (!props.appKey) {
+    message.warning('先填 appKey 再上传');
+    return;
+  }
+  input.value?.click();
+}
+
+async function onPick(event: Event): Promise<void> {
+  const target = event.target as HTMLInputElement;
+  const files = Array.from(target.files ?? []);
+  target.value = '';
+  if (!files.length) return;
+
+  uploading.value = true;
+  try {
+    const uploaded: string[] = [];
+    for (const file of props.multiple ? files : files.slice(0, 1)) {
+      const result = await api.media.upload(file, props.scope, props.appKey);
+      uploaded.push(result.path);
+    }
+    commit(props.multiple ? [...items.value, ...uploaded] : [uploaded[0]]);
+  } catch (error) {
+    message.error((error as Error).message);
+  } finally {
+    uploading.value = false;
+  }
 }
 
 function move(index: number, offset: number): void {
@@ -77,70 +129,146 @@ function removeAt(index: number): void {
   commit(next);
 }
 
-function onManualUrl(value: string): void {
-  manualUrl.value = value;
-  if (!value.trim()) return;
-  commit(props.multiple ? [...items.value, value.trim()] : [value.trim()]);
-  manualUrl.value = '';
-}
-
-async function upload(options: UploadCustomRequestOptions): Promise<void> {
-  const file = options.file.file;
-  if (!file) return;
-  if (!props.appKey) {
-    message.warning('先填 appKey 再上传');
-    return;
-  }
-  uploading.value = true;
-  try {
-    const result = await api.media.upload(file, props.scope, props.appKey);
-    commit(props.multiple ? [...items.value, result.path] : [result.path]);
-    message.success('已上传');
-  } catch (error) {
-    message.error((error as Error).message);
-  } finally {
-    uploading.value = false;
-  }
+function addUrl(event: KeyboardEvent): void {
+  const value = (event.target as HTMLInputElement).value.trim();
+  if (!value) return;
+  commit(props.multiple ? [...items.value, value] : [value]);
+  (event.target as HTMLInputElement).value = '';
 }
 </script>
 
 <style scoped>
-.media-uploader {
+.media {
   width: 100%;
 }
-.media-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.media-item {
+.icon-slot {
   position: relative;
-  border: 1px solid var(--line, #e5e5e5);
-  border-radius: 6px;
+  width: 92px;
+  height: 92px;
+  border-radius: 14px;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  background: rgba(128, 128, 128, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   overflow: hidden;
-  background: #fafafa;
+  transition: border-color 0.15s ease;
 }
-.media-item img {
-  display: block;
-  width: 96px;
-  height: 64px;
+.icon-slot:hover {
+  border-color: rgba(128, 128, 128, 0.4);
+}
+.icon-slot.empty {
+  border-style: dashed;
+}
+.icon-slot img {
+  width: 74px;
+  height: 74px;
   object-fit: contain;
 }
-.media-actions {
+.hint {
+  font-size: 12px;
+  opacity: 0.45;
+}
+.slot-actions {
   position: absolute;
   inset: auto 0 0 0;
   display: flex;
   justify-content: center;
-  gap: 2px;
-  background: rgba(0, 0, 0, 0.45);
-}
-.media-actions button {
-  border: 0;
-  background: transparent;
-  color: #fff;
+  gap: 4px;
+  padding: 4px 0;
   font-size: 11px;
-  padding: 1px 5px;
+  color: #fff;
+  background: rgba(20, 18, 16, 0.62);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.slot-actions .sep {
+  opacity: 0.5;
+}
+.icon-slot:hover .slot-actions {
+  opacity: 1;
+}
+
+.shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shot {
+  position: relative;
+  width: 104px;
+  height: 66px;
+  border-radius: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  background: rgba(128, 128, 128, 0.06);
+  overflow: hidden;
+}
+.shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.shot-actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(20, 18, 16, 0.42);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.shot:hover .shot-actions {
+  opacity: 1;
+}
+.shot-actions button {
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
   cursor: pointer;
+}
+.shot.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  color: rgba(128, 128, 128, 0.75);
+  font-size: 18px;
+  cursor: pointer;
+}
+.shot.add:hover {
+  border-color: rgba(128, 128, 128, 0.45);
+  color: rgba(128, 128, 128, 1);
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.link-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  opacity: 0.55;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-toggle:hover {
+  opacity: 0.85;
+}
+.tip {
+  font-size: 11px;
+  opacity: 0.35;
 }
 </style>
