@@ -1,5 +1,5 @@
 <template>
-  <header class="masthead">
+  <header class="masthead" @mousedown="startWindowDrag">
     <div class="brand">
       <img :src="starUrl" class="brand-star" alt="" />
       <div class="brand-name">
@@ -18,7 +18,7 @@
     </div>
   </header>
 
-  <section class="toolbar-row">
+  <section class="toolbar-row" @mousedown="startWindowDrag">
     <button
       class="refresh-btn"
       :class="{ spinning: loading }"
@@ -84,6 +84,9 @@
 
 <script setup lang="ts">
 import starUrl from '../assets/star.png';
+import { useWindowDrag } from '../composables/useWindowDrag';
+
+const { onMouseDown: startWindowDrag } = useWindowDrag();
 
 defineProps<{
   loading: boolean;

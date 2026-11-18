@@ -108,7 +108,9 @@ button {
   border-bottom: 1px solid var(--line);
   background: rgba(243, 241, 236, 0.92);
   backdrop-filter: blur(10px);
-  --wails-draggable: drag;
+  --wails-draggable: no-drag;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .masthead-actions {
