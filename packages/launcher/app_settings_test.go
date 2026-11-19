@@ -15,6 +15,9 @@ import (
 func TestSettingsConcurrentAccess(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Linux 下 os.UserConfigDir 优先读 XDG_CONFIG_HOME，一并指到临时目录，
+	// 避免测试文件落到 runner 的真实配置目录。
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	app := NewApp()
 	var wg sync.WaitGroup
@@ -41,7 +44,12 @@ func TestSettingsConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 
-	path := filepath.Join(home, "Library", "Application Support", "vakaohub", "settings.json")
+	// 路径必须和实现走同一套推导，不能按 macOS 目录布局写死，否则 Linux runner 上必然找不到文件。
+	dir, err := configDir()
+	if err != nil {
+		t.Fatalf("解析配置目录: %v", err)
+	}
+	path := filepath.Join(dir, "settings.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("读取设置文件: %v", err)
