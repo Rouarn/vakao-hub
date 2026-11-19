@@ -72,8 +72,11 @@ test('灰度版本的下载链接带上 deviceId', () => {
   const service = buildService({ id: 1, status: RELEASE_STATUS.GRAY });
   const url = service.buildDownloadUrl(
     { headers: {}, protocol: 'http', get: () => 'localhost' },
-    7,
+    { id: 7, sha256: 'abcdef1234567890' },
     'device 1',
   );
-  assert.match(url, /deviceId=device%201/);
+  // 按参数语义断言：URLSearchParams 把空格编码成 + 还是 %20 都算对
+  const params = new URL(url).searchParams;
+  assert.equal(params.get('deviceId'), 'device 1');
+  assert.equal(params.get('v'), 'abcdef12');
 });
