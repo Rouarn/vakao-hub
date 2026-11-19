@@ -40,6 +40,18 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: packages/launcher/go.sum
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: packages/launcher/frontend/package-lock.json
+
+      # main.go 用 go:embed 内嵌 frontend/dist，而 dist 是构建产物不入库，
+      # 不先构建前端时 go vet / go build 会报 "pattern all:frontend/dist: no matching files found"
+      - name: Build frontend
+        working-directory: packages/launcher/frontend
+        run: npm ci && npm run build
+
       - name: Vet
         run: go vet ./...
 
