@@ -146,8 +146,8 @@ function addUrl(event: KeyboardEvent): void {
   width: 92px;
   height: 92px;
   border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.22);
-  background: rgba(128, 128, 128, 0.06);
+  border: 1px solid var(--line);
+  background: var(--line-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,7 +156,7 @@ function addUrl(event: KeyboardEvent): void {
   transition: border-color 0.15s ease;
 }
 .icon-slot:hover {
-  border-color: rgba(128, 128, 128, 0.4);
+  border-color: var(--line-strong);
 }
 .icon-slot.empty {
   border-style: dashed;
@@ -178,8 +178,9 @@ function addUrl(event: KeyboardEvent): void {
   gap: 4px;
   padding: 4px 0;
   font-size: 11px;
-  color: #fff;
-  background: rgba(20, 18, 16, 0.62);
+  color: var(--nav-text);
+  /* 遮罩压在缩略图上，两套主题下都要保持深色，故用导航墨色加透明度 */
+  background: color-mix(in srgb, var(--nav-bg) 62%, transparent);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -200,8 +201,8 @@ function addUrl(event: KeyboardEvent): void {
   width: 104px;
   height: 66px;
   border-radius: 10px;
-  border: 1px solid rgba(128, 128, 128, 0.22);
-  background: rgba(128, 128, 128, 0.06);
+  border: 1px solid var(--line);
+  background: var(--line-soft);
   overflow: hidden;
 }
 .shot img {
@@ -216,7 +217,7 @@ function addUrl(event: KeyboardEvent): void {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: rgba(20, 18, 16, 0.42);
+  background: color-mix(in srgb, var(--nav-bg) 42%, transparent);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -225,8 +226,8 @@ function addUrl(event: KeyboardEvent): void {
 }
 .shot-actions button {
   border: 0;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: var(--nav-hover);
+  color: var(--nav-text);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -239,13 +240,13 @@ function addUrl(event: KeyboardEvent): void {
   align-items: center;
   justify-content: center;
   border-style: dashed;
-  color: rgba(128, 128, 128, 0.75);
+  color: var(--faint);
   font-size: 18px;
   cursor: pointer;
 }
 .shot.add:hover {
-  border-color: rgba(128, 128, 128, 0.45);
-  color: rgba(128, 128, 128, 1);
+  border-color: var(--line-strong);
+  color: var(--muted);
 }
 .foot {
   display: flex;

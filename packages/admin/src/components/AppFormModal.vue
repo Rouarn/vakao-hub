@@ -287,7 +287,7 @@ async function save(): Promise<void> {
 .group + .group {
   margin-top: 8px;
   padding-top: 16px;
-  border-top: 1px solid rgba(128, 128, 128, 0.16);
+  border-top: 1px solid var(--line);
 }
 .group h4 {
   margin: 0 0 10px;
