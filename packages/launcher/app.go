@@ -29,6 +29,9 @@ type App struct {
 	settingsMu sync.RWMutex
 	settings   Settings
 	store      *store.Store
+	events     chan api.EventReport
+	sentMu     sync.Mutex
+	sent       map[string]bool
 }
 
 func NewApp() *App {
@@ -37,10 +40,22 @@ func NewApp() *App {
 		fmt.Println("读取已安装列表失败，本次运行使用内存记录：", err)
 		s = store.NewMemory()
 	}
-	return &App{
-		settings: loadSettings(),
-		store:    s,
+
+	settings := loadSettings()
+	if settings.DeviceID == "" {
+		settings.DeviceID = newDeviceID()
+		// 写盘失败只会导致下次启动重新生成标识，不影响启动与上报。
+		_ = saveSettings(settings)
 	}
+
+	app := &App{
+		settings: settings,
+		store:    s,
+		events:   make(chan api.EventReport, 32),
+		sent:     make(map[string]bool),
+	}
+	go app.eventWorker()
+	return app
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -262,6 +277,19 @@ func (a *App) catalogLocked() (CatalogView, error) {
 			}
 		}
 
+		// 只有真的看到可更新版本才记一次 check：自动刷新与手动刷新都会走到这里，
+		// 按「应用 + 目标版本」去重后同一次更新机会只计一次。
+		if item.HasUpdate {
+			event := a.eventFor(item.AppKey, platform, arch)
+			event.ReleaseID = app.Latest.ID
+			event.FromVersionCode = item.InstalledVersionCode
+			event.ToVersionCode = app.Latest.VersionCode
+			a.onceEvent(
+				fmt.Sprintf("check:%s:%d", item.AppKey, app.Latest.VersionCode),
+				withType(event, eventCheck),
+			)
+		}
+
 		view.Apps = append(view.Apps, item)
 	}
 	return view, nil
@@ -307,6 +335,21 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 	}
 
 	a.emit(appKey, "preparing", -1, "准备下载")
+
+	// 一次安装对应一次下载动作：以下载/安装事件共用同一份上下文，
+	// 去重键统一用产物 ID，重试或连点不会重复计数。
+	installedCode := 0
+	if record, ok := a.store.Get(appKey); ok {
+		installedCode = record.VersionCode
+	}
+	event := a.eventFor(appKey, platform, arch)
+	event.ReleaseID = app.Latest.ID
+	event.ArtifactID = artifact.ID
+	event.FromVersionCode = installedCode
+	event.ToVersionCode = app.Latest.VersionCode
+	eventKey := fmt.Sprintf("artifact:%d", artifact.ID)
+	a.onceEvent(eventKey+":download_start", withType(event, eventDownloadStart))
+
 	tmpDir, err := os.MkdirTemp("", "vakaohub-install-*")
 	if err != nil {
 		return store.Installed{}, err
@@ -321,12 +364,15 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 
 	sha, err := a.download(appKey, artifact.DownloadURL, artifact.ID, filePath, artifact.Size)
 	if err != nil {
+		a.onceEvent(eventKey+":download_fail", withType(event, eventDownloadFail))
 		a.emit(appKey, "error", -1, err.Error())
 		return store.Installed{}, err
 	}
+	a.onceEvent(eventKey+":download_success", withType(event, eventDownloadSuccess))
 
 	a.emit(appKey, "verifying", 100, "校验 SHA-256")
 	if !strings.EqualFold(sha, artifact.SHA256) {
+		a.onceEvent(eventKey+":verify_fail", withType(event, eventVerifyFail))
 		message := fmt.Sprintf("校验失败：期望 %s，实际 %s", artifact.SHA256, sha)
 		a.emit(appKey, "error", -1, message)
 		return store.Installed{}, fmt.Errorf("%s", message)
@@ -347,9 +393,12 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 	a.emit(appKey, "installing", 100, "正在安装")
 	installPath, err := install.Install(artifact.Format, filePath, app.AppKey, app.Name, existingPath)
 	if err != nil {
+		a.onceEvent(eventKey+":install_fail", withType(event, eventInstallFail))
 		a.emit(appKey, "error", -1, err.Error())
 		return store.Installed{}, err
 	}
+	// msi / exe 拿不到安装结果，Install 返回 nil 只代表安装程序已正常启动，事件按成功计。
+	a.onceEvent(eventKey+":install_success", withType(event, eventInstallSuccess))
 	// 安装后让已安装索引重新扫描，下一次刷新能看到新条目。
 	install.InvalidateIndex()
 
@@ -423,7 +472,14 @@ func (a *App) Launch(appKey string) error {
 	if !ok {
 		return fmt.Errorf("尚未安装该应用")
 	}
-	return install.Launch(item.InstallPath)
+	if err := install.Launch(item.InstallPath); err != nil {
+		return err
+	}
+
+	// 每次成功启动都是一次真实使用行为，不做去重；版本未知时留空由前端显示为「-」。
+	platform, arch := platformInfo()
+	a.reportEvent(withType(a.eventFor(appKey, platform, arch), eventLaunch))
+	return nil
 }
 
 // Reveal 在系统文件管理器中选中应用。

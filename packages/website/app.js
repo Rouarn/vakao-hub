@@ -89,6 +89,61 @@
     return new Date(ms).toLocaleDateString('zh-CN');
   }
 
+  // 匿名设备标识：只用于事件去重与漏斗统计，存在 localStorage，不采集任何硬件信息。
+  var DEVICE_KEY = 'vakao_hub_device';
+
+  function deviceID() {
+    try {
+      var value = localStorage.getItem(DEVICE_KEY);
+      if (!value) {
+        value =
+          'web-' +
+          Date.now().toString(36) +
+          '-' +
+          Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(DEVICE_KEY, value);
+      }
+      return value;
+    } catch (error) {
+      return '';
+    }
+  }
+
+  var reportedDownloads = {};
+
+  // 下载点击上报：失败静默丢弃，绝不阻塞或改变下载行为；同一产物本次会话只报一次。
+  function reportDownloadStart(app, artifact) {
+    if (!app || !app.latest || !artifact || !artifact.id) return;
+    var key = String(artifact.id);
+    if (reportedDownloads[key]) return;
+    reportedDownloads[key] = true;
+
+    var payload = {
+      appKey: app.appKey,
+      platform: artifact.platform,
+      arch: artifact.arch,
+      type: 'download_start',
+      releaseId: app.latest.id,
+      artifactId: artifact.id,
+      toVersionCode: app.latest.versionCode,
+    };
+    var device = deviceID();
+    if (device) payload.deviceId = device;
+
+    try {
+      fetch(apiBase + '/updates/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(function () {
+        /* 上报失败不影响下载 */
+      });
+    } catch (error) {
+      /* 上报失败不影响下载 */
+    }
+  }
+
   function renderPlatforms() {
     platformBox.textContent = '';
     platformOrder.forEach(function (platform) {
@@ -184,20 +239,22 @@
           artifact.arch +
           ' · ' +
           formatBytes(artifact.size);
-        downloads.appendChild(
-          el(
-            'a',
-            {
-              class: 'download',
-              href: artifact.downloadUrl,
-              rel: 'noreferrer',
-            },
-            [
-              el('strong', { text: '下载 ' + artifact.format.toUpperCase() }),
-              el('span', { text: label }),
-            ],
-          ),
+        var link = el(
+          'a',
+          {
+            class: 'download',
+            href: artifact.downloadUrl,
+            rel: 'noreferrer',
+          },
+          [
+            el('strong', { text: '下载 ' + artifact.format.toUpperCase() }),
+            el('span', { text: label }),
+          ],
         );
+        link.addEventListener('click', function () {
+          reportDownloadStart(app, artifact);
+        });
+        downloads.appendChild(link);
       });
 
       var links = el('div', { class: 'app-links' });
@@ -242,15 +299,21 @@
     return arch;
   }
 
+  var heroTarget = null;
+
   function updateHero() {
     var isAndroid = state.platform === 'android';
     var target = state.apps.filter(function (app) {
       return app.latest && app.latest.artifacts.length &&
         (isAndroid || app.appKey === 'vakaohub');
     })[0];
-    if (!target) return;
+    if (!target) {
+      heroTarget = null;
+      return;
+    }
 
     var artifact = target.latest.artifacts[0];
+    heroTarget = artifact ? { app: target, artifact: artifact } : null;
     var link = document.getElementById('hero-download');
     if (link && artifact) link.href = artifact.downloadUrl;
 
@@ -359,6 +422,14 @@
 
   document.getElementById('refresh').addEventListener('click', load);
   document.getElementById('api-label').textContent = apiBase;
+
+  // 首屏按钮的 href 会随平台切换，这里只挂一次监听，点击时读取当前目标。
+  var heroDownload = document.getElementById('hero-download');
+  if (heroDownload) {
+    heroDownload.addEventListener('click', function () {
+      if (heroTarget) reportDownloadStart(heroTarget.app, heroTarget.artifact);
+    });
+  }
 
   renderPlatforms();
   renderStatus();
