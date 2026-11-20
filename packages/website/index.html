@@ -1,213 +1,106 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VaKao Hub · 软件中心</title>
     <meta
       name="description"
-      content="VaKao Hub：把 Android 与 macOS 软件的安装、版本、灰度与校验，收进一个安静的工作台。"
+      content="VaKao Hub：桌面启动器与软件目录。发现、安装、校验、更新，九款自用应用放在同一个窗口里。"
     />
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261120b" />
+    <link rel="stylesheet" href="./styles.css?v=20261121a" />
+    <script>
+      /* 首次绘制前定主题：手动选过优先，否则跟随系统 */
+      (function () {
+        try {
+          var saved = localStorage.getItem('vakao_hub_theme');
+          var sys = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          document.documentElement.dataset.theme = saved === 'light' || saved === 'dark' ? saved : sys;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div class="site">
       <header class="nav">
-        <a class="brand" href="#top" aria-label="VaKao Hub">
-          <img class="star" src="./assets/star.png" alt="" />
-          <span class="brand-text">
-            <strong>VaKao Hub</strong>
-            <small>软件中心</small>
-          </span>
+        <a class="brand" href="#top">
+          <img src="./assets/star.png?v=20261121a" alt="" />
+          <b>VaKao Hub</b>
+          <i>SOFTWARE SUITE</i>
         </a>
-
-        <nav class="nav-links">
-          <a href="#apps">软件目录</a>
-          <a href="#why">为什么</a>
-          <a href="#inside">启动器</a>
+        <nav>
+          <a href="#library">软件目录</a>
+          <a href="https://github.com/Rouarn/vakao-hub" target="_blank" rel="noreferrer">源码</a>
+          <button class="theme-btn" type="button" id="theme-btn" aria-label="切换到亮色" title="切换深浅色">
+            <svg class="sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.2" /><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4" />
+            </svg>
+            <svg class="moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M20 14.3A8.3 8.3 0 0 1 9.7 4a8.5 8.5 0 1 0 10.3 10.3Z" />
+            </svg>
+          </button>
+          <span class="nav-cta" id="nav-cta"></span>
         </nav>
-
-        <div class="nav-actions">
-          <a class="link" href="https://github.com/Rouarn/vakao-hub" target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          <a class="button button-small" href="#apps">下载</a>
-        </div>
       </header>
 
       <main id="top">
         <section class="hero">
-          <div class="hero-copy">
-            <p class="hud"><span class="pulse"></span>VAKAO / SOFTWARE DISTRIBUTION</p>
-            <h1>
-              软件，<br />
-              应该<em>在一个地方。</em>
-            </h1>
-            <p class="lede">
-              把散落的安装包、版本号和更新提示，收进一个安静的工作台。
-              Android 与 macOS 共用一套版本、灰度与完整性校验。
-            </p>
-
-            <div class="hero-actions">
-              <a id="hero-download" class="button" href="#apps">
-                <span id="hero-download-label">下载 macOS 版</span>
-                <span aria-hidden="true">↗</span>
-              </a>
-              <a class="button button-ghost" href="#apps">查看全部软件</a>
-            </div>
-
-            <div class="hero-meta">
-              <span id="hero-version">v0.1.1</span>
-              <span id="hero-platform">Apple Silicon</span>
-              <span>SHA-256 校验</span>
-            </div>
-          </div>
-
-          <div class="hero-visual" aria-hidden="true">
-            <div class="visual-grid"></div>
-            <div class="window">
-              <img src="./assets/screens/launcher.png?v=20261103q" alt="" />
-            </div>
-            <div class="float-card">
-              <span class="hud">LIVE / CATALOG</span>
-              <strong id="float-summary">3 apps · 2 platforms</strong>
-              <div class="float-bars">
-                <span style="--c: var(--orange); --w: 88%"></span>
-                <span style="--c: var(--blue); --w: 64%"></span>
-                <span style="--c: var(--purple); --w: 42%"></span>
-                <span style="--c: var(--yellow); --w: 24%"></span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="stats" aria-label="概览">
-          <div class="stat">
-            <span class="hud">APP COUNT</span>
-            <strong id="stat-apps">03</strong>
-            <span>已上架软件</span>
-          </div>
-          <div class="stat">
-            <span class="hud">PLATFORMS</span>
-            <strong>02</strong>
-            <span>macOS · Android</span>
-          </div>
-          <div class="stat">
-            <span class="hud">INTEGRITY</span>
-            <strong>SHA-256</strong>
-            <span>安装前后校验</span>
-          </div>
-          <div class="stat">
-            <span class="hud">DELIVERY</span>
-            <strong>Gray</strong>
-            <span>灰度 / 强更 / 回滚</span>
-          </div>
-        </section>
-
-        <section id="apps" class="section catalog">
-          <div class="section-head">
-            <p class="hud">01 / CATALOG</p>
-            <div class="section-title">
-              <h2>软件目录</h2>
-              <p>按平台选择最新版本。下载后可用 VaKao Hub 启动器统一安装与更新。</p>
-            </div>
-          </div>
-
-          <div class="catalog-bar">
-            <div class="tabs" id="platforms"></div>
-            <label class="arch">
-              <span class="hud">ARCH</span>
-              <select id="arch">
-                <option value="universal">通用 / 不确定</option>
-                <option value="arm64">arm64（Apple Silicon）</option>
-                <option value="x64">x64（Intel / AMD）</option>
-              </select>
-            </label>
-            <label class="search">
-              <span class="hud">SEARCH</span>
-              <input id="search" type="search" placeholder="搜索软件" autocomplete="off" />
-            </label>
-            <button id="refresh" class="button button-ghost">刷新</button>
-          </div>
-
-          <div id="status" class="status" hidden></div>
-          <p id="platform-note" class="note" hidden>
-            macOS 版本尚未公证，首次打开若被系统拦截，请在 Finder 中右键点击应用选择「打开」。
-          </p>
-
-          <div id="apps-grid" class="apps-grid"></div>
-        </section>
-
-        <section id="why" class="section why">
-          <div class="section-head">
-            <p class="hud">02 / WHY</p>
-            <div class="section-title">
-              <h2>不是另一个下载页</h2>
-              <p>它更像一条有状态的发布流水线，只是你看到的只有下载与更新。</p>
-            </div>
-          </div>
-
-          <div class="why-grid">
-            <article class="why-card">
-              <span class="index">01</span>
-              <h3>一个入口</h3>
-              <p>应用、版本、产物和更新记录放在同一套模型里。macOS 与 Android 不再各维护一套分发逻辑。</p>
-            </article>
-            <article class="why-card">
-              <span class="index">02</span>
-              <h3>有据可查</h3>
-              <p>每个安装包都有 SHA-256、下载地址与发布状态；灰度、强更、回滚都在后台留痕。</p>
-            </article>
-            <article class="why-card">
-              <span class="index">03</span>
-              <h3>安静地更新</h3>
-              <p>启动器检查、下载、校验、安装；有更新时提示，不弹窗轰炸，也不静默替换正在使用的版本。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="inside" class="section inside">
-          <div class="inside-copy">
-            <p class="hud">03 / INSIDE</p>
-            <h2>一个窗口，<br />管理所有版本。</h2>
-            <p>
-              启动器会识别当前运行的应用与手动安装的副本，列出可更新项、安装位置与重复安装。
-              版本号、状态与操作都在同一行完成。
-            </p>
-            <ul class="checklist">
-              <li>自动检测本机版本</li>
-              <li>下载断点续传与 SHA-256 校验</li>
-              <li>macOS 签名完整性检查</li>
-              <li>强更拦截与重复安装提示</li>
+          <div>
+            <p class="kicker" id="kicker">macOS 12+ · v1.0.3</p>
+            <h1>把 VaKao 的软件，<br />放在一个地方。</h1>
+            <p class="lede">桌面启动器：发现、安装、校验、更新。九款自用应用放在同一个窗口里，版本和状态一目了然。</p>
+            <div class="cta" id="hero-cta"></div>
+            <ul class="specs">
+              <li id="spec-os">Apple Silicon · ZIP</li>
+              <li>安装前后 SHA-256 校验</li>
+              <li>前台无账号、无追踪</li>
             </ul>
-            <a class="button" href="#apps">下载启动器 <span aria-hidden="true">↗</span></a>
           </div>
-          <figure class="inside-visual">
-            <img src="./assets/screens/launcher.png?v=20261103q" alt="VaKao Hub 启动器界面" />
+          <div class="shot">
+            <img src="./assets/screens/launcher.png?v=20261121a" width="2400" height="1600" alt="VaKao Hub 启动器界面" />
+          </div>
+        </section>
+
+        <section class="library" id="library">
+          <div class="lib-head">
+            <div>
+              <h2>软件目录</h2>
+              <p>按平台筛选，下载后也能交给启动器统一更新。</p>
+            </div>
+            <div class="tabs" id="tabs" role="tablist" aria-label="按平台筛选"></div>
+          </div>
+          <div class="grid" id="grid"></div>
+        </section>
+
+        <section class="launch" id="launch">
+          <div>
+            <h2>装一次，之后只在这里更新。</h2>
+            <p class="launch-lead">启动器读取同一套目录，检查、下载、校验、安装；有更新时提示，不弹窗轰炸，也不静默替换正在使用的版本。</p>
+            <div class="launch-feat" id="launch-feat"></div>
+          </div>
+          <figure class="launch-shot">
+            <img src="./assets/screens/launcher-card.png?v=20261121a" width="812" height="705" alt="VaKao Hub 启动器中的应用列表 · 已安装卡片" />
           </figure>
         </section>
       </main>
 
-      <footer class="footer">
-        <div class="footer-brand">
-          <img class="star" src="./assets/star.png" alt="" />
-          <span>VaKao Hub</span>
-        </div>
-        <div class="footer-meta">
+      <footer class="foot">
+        <span>© 2026 Rouarn · VaKao Hub</span>
+        <nav>
           <a href="https://github.com/Rouarn/vakao-hub" target="_blank" rel="noreferrer">GitHub</a>
           <a href="/admin/">管理后台</a>
-          <span>© 2026 Rouarn</span>
-        </div>
-        <div class="footer-api">
-          <span class="hud">API</span>
-          <span id="api-label"></span>
-        </div>
+        </nav>
+        <p class="foot-note">
+          静态页面 · 软件目录与下载来自 <span id="api-label" style="font-family: var(--mono)">/api/v1</span> · 下载点击只上报匿名事件，不采集硬件信息。
+        </p>
       </footer>
     </div>
 
-    <script src="./app.js?v=20261120b"></script>
+    <script src="./app.js?v=20261121a"></script>
   </body>
 </html>

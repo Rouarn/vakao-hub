@@ -2,33 +2,47 @@
   'use strict';
 
   var params = new URLSearchParams(location.search);
-  var platformLabels = {
+  var PLATFORMS = ['darwin', 'win32', 'android'];
+  var LABELS = {
     darwin: 'macOS',
     win32: 'Windows',
     android: 'Android',
     linux: 'Linux',
   };
-  var platformOrder = ['darwin', 'win32', 'android', 'linux'];
+  var TABS = [
+    ['darwin', 'macOS'],
+    ['win32', 'Windows'],
+    ['android', 'Android'],
+    ['all', '全部'],
+  ];
+  var STORE_PLATFORM = 'vakao_hub_platform';
+  var STORE_FILTER = 'vakao_hub_filter';
+  var STORE_THEME = 'vakao_hub_theme';
   var palette = ['#5fbedc', '#f0995f', '#a27fc2', '#eddf55'];
 
-  var state = {
-    platform: detectPlatform(),
-    arch: 'universal',
-    apps: [],
-    totalApps: 0,
-    totalPlatforms: 0,
-    loading: false,
-    error: '',
-    query: '',
-  };
+  function readStore(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      return null;
+    }
+  }
 
-  var apiBase = resolveApi();
-  var archSelect = document.getElementById('arch');
-  var platformBox = document.getElementById('platforms');
-  var appsBox = document.getElementById('apps-grid');
-  var statusBox = document.getElementById('status');
-  var noteBox = document.getElementById('platform-note');
-  var searchInput = document.getElementById('search');
+  function writeStore(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      /* 隐私模式下忽略 */
+    }
+  }
+
+  function detectPlatform() {
+    var ua = navigator.userAgent.toLowerCase();
+    if (/android/.test(ua)) return 'android';
+    if (/iphone|ipad|ipod|mac/.test(ua)) return 'darwin';
+    if (/win/.test(ua)) return 'win32';
+    return 'linux';
+  }
 
   function resolveApi() {
     var override = params.get('api');
@@ -42,28 +56,48 @@
     return '/api/v1';
   }
 
-  function detectPlatform() {
-    var ua = navigator.userAgent.toLowerCase();
-    if (/android/.test(ua)) return 'android';
-    if (/mac|iphone|ipad/.test(ua)) return 'darwin';
-    if (/win/.test(ua)) return 'win32';
-    return 'linux';
-  }
+  var savedPlatform = readStore(STORE_PLATFORM);
+  var savedFilter = readStore(STORE_FILTER);
+  var initialPlatform = LABELS[savedPlatform] ? savedPlatform : detectPlatform();
+  var selectableFilter =
+    savedFilter === 'all' || savedFilter === 'darwin' || savedFilter === 'win32' || savedFilter === 'android';
+  var initialFilter = selectableFilter
+    ? savedFilter
+    : PLATFORMS.indexOf(initialPlatform) >= 0
+      ? initialPlatform
+      : 'all';
 
-  function el(tag, props, children) {
-    var node = document.createElement(tag);
-    props = props || {};
-    children = children || [];
-    Object.keys(props).forEach(function (key) {
-      if (key === 'class') node.className = props[key];
-      else if (key === 'text') node.textContent = props[key];
-      else node.setAttribute(key, props[key]);
-    });
-    children.forEach(function (child) {
-      if (typeof child === 'string') node.appendChild(document.createTextNode(child));
-      else if (child) node.appendChild(child);
-    });
-    return node;
+  var state = {
+    platform: initialPlatform,
+    filter: initialFilter,
+    apps: [],
+    loading: true,
+    error: '',
+  };
+
+  var apiBase = resolveApi();
+  var grid = document.getElementById('grid');
+  var tabsBox = document.getElementById('tabs');
+  var heroCta = document.getElementById('hero-cta');
+  var navCta = document.getElementById('nav-cta');
+  var kicker = document.getElementById('kicker');
+  var specOs = document.getElementById('spec-os');
+  var featBox = document.getElementById('launch-feat');
+  var apiLabel = document.getElementById('api-label');
+
+  function esc(value) {
+    return String(value === null || value === undefined ? '' : value).replace(
+      /[&<>"']/g,
+      function (char) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        }[char];
+      },
+    );
   }
 
   function colorFor(key) {
@@ -76,21 +110,38 @@
 
   // 与 @vakao/hub-shared 的 formatBytes 保持同一口径（website 无构建，按共享规则实现）。
   function formatBytes(bytes) {
-    if (bytes === null || bytes === undefined || !isFinite(bytes) || bytes < 0) return '未知大小';
+    if (bytes === null || bytes === undefined || !isFinite(bytes) || bytes < 0)
+      return '未知大小';
     if (!bytes) return '0 B';
     var units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    var index = Math.min(
+      Math.floor(Math.log(bytes) / Math.log(1024)),
+      units.length - 1,
+    );
     return (bytes / Math.pow(1024, index)).toFixed(1) + ' ' + units[index];
   }
 
-  function formatDate(timestamp) {
-    if (!timestamp || !isFinite(timestamp) || timestamp < 0) return '—';
-    var ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
-    return new Date(ms).toLocaleDateString('zh-CN');
+  function trimOs(value) {
+    return String(value || '').replace(/\.0$/, '');
+  }
+
+  function osText(platform, minOs) {
+    if (platform === 'darwin') return 'macOS ' + trimOs(minOs) + '+';
+    if (platform === 'win32') return 'Windows ' + trimOs(minOs) + '+';
+    if (platform === 'android') return 'Android';
+    return 'Desktop';
+  }
+
+  function archLabel(platform, arch) {
+    if (!arch || arch === 'universal') return 'Universal';
+    if (arch === 'arm64') return platform === 'darwin' ? 'Apple Silicon' : 'arm64';
+    if (arch === 'x64') return platform === 'darwin' ? 'Intel' : 'x64';
+    return arch;
   }
 
   // 匿名设备标识：只用于事件去重与漏斗统计，存在 localStorage，不采集任何硬件信息。
   var DEVICE_KEY = 'vakao_hub_device';
+  var reportedDownloads = {};
 
   function deviceID() {
     try {
@@ -109,11 +160,11 @@
     }
   }
 
-  var reportedDownloads = {};
-
   // 下载点击上报：失败静默丢弃，绝不阻塞或改变下载行为；同一产物本次会话只报一次。
   function reportDownloadStart(app, artifact) {
-    if (!app || !app.latest || !artifact || !artifact.id) return;
+    if (!app || !artifact || !artifact.id) return;
+    var release = app.releases[artifact.platform];
+    if (!release) return;
     var key = String(artifact.id);
     if (reportedDownloads[key]) return;
     reportedDownloads[key] = true;
@@ -123,9 +174,9 @@
       platform: artifact.platform,
       arch: artifact.arch,
       type: 'download_start',
-      releaseId: app.latest.id,
+      releaseId: release.releaseId,
       artifactId: artifact.id,
-      toVersionCode: app.latest.versionCode,
+      toVersionCode: release.versionCode,
     };
     var device = deviceID();
     if (device) payload.deviceId = device;
@@ -144,295 +195,399 @@
     }
   }
 
-  function renderPlatforms() {
-    platformBox.textContent = '';
-    platformOrder.forEach(function (platform) {
-      var button = el('button', {
-        type: 'button',
-        class: platform === state.platform ? 'active' : '',
-        text: platformLabels[platform],
-      });
-      button.addEventListener('click', function () {
-        state.platform = platform;
-        renderPlatforms();
-        renderStatus();
-        load();
-      });
-      platformBox.appendChild(button);
-    });
-  }
-
-  function renderStatus() {
-    statusBox.hidden = !state.error;
-    statusBox.textContent = state.error || '';
-    noteBox.hidden = state.platform !== 'darwin';
-  }
-
-  function iconFor(app) {
-    var source = app.iconUrl || '';
-    if (!source) {
-      var fallback = el('div', {
-        class: 'app-icon',
-        style: 'background:' + colorFor(app.appKey),
-      });
-      fallback.textContent = (app.name || '?').trim().charAt(0).toUpperCase();
-      return fallback;
-    }
-
-    var box = el('div', { class: 'app-icon' });
-    box.appendChild(el('img', { src: source, alt: app.name, loading: 'lazy' }));
-    return box;
-  }
-
-  function matchesQuery(app) {
-    if (!state.query) return true;
-    var value = state.query.toLowerCase();
+  function findApp(appKey) {
     return (
-      (app.name || '').toLowerCase().indexOf(value) >= 0 ||
-      (app.appKey || '').toLowerCase().indexOf(value) >= 0 ||
-      (app.description || '').toLowerCase().indexOf(value) >= 0
+      state.apps.filter(function (app) {
+        return app.appKey === appKey;
+      })[0] || null
     );
   }
 
-  function renderApps() {
-    appsBox.textContent = '';
-
-    if (state.loading) {
-      appsBox.appendChild(el('div', { class: 'empty', text: '正在读取软件目录…' }));
-      return;
-    }
-
-    var visible = state.apps.filter(matchesQuery);
-    if (!visible.length) {
-      appsBox.appendChild(
-        el('div', {
-          class: 'empty',
-          text: state.query ? '没有匹配的软件。' : '该平台暂无发布版本。',
-        }),
-      );
-      return;
-    }
-
-    visible.forEach(function (app) {
-      var latest = app.latest;
-      var icon = iconFor(app);
-
-      var title = el('div', { class: 'app-title' }, [
-        el('h3', { text: app.name }),
-        el('p', {
-          text: (app.category || 'application') + ' / ' + (app.appKey || ''),
-        }),
-      ]);
-
-      var version = el('div', { class: 'app-version' }, [
-        el('strong', { text: latest ? 'v' + latest.versionName : '—' }),
-        el('span', {
-          text: latest && latest.publishedAt ? formatDate(latest.publishedAt) : '',
-        }),
-      ]);
-
-      var downloads = el('div', { class: 'app-downloads' });
-      (latest ? latest.artifacts : []).forEach(function (artifact) {
-        var label =
-          artifact.format.toUpperCase() +
-          ' · ' +
-          artifact.arch +
-          ' · ' +
-          formatBytes(artifact.size);
-        var link = el(
-          'a',
-          {
-            class: 'download',
-            href: artifact.downloadUrl,
-            rel: 'noreferrer',
-          },
-          [
-            el('strong', { text: '下载 ' + artifact.format.toUpperCase() }),
-            el('span', { text: label }),
-          ],
-        );
-        link.addEventListener('click', function () {
-          reportDownloadStart(app, artifact);
-        });
-        downloads.appendChild(link);
+  function findArtifact(app, artifactId) {
+    if (!app) return null;
+    var hit = null;
+    Object.keys(app.artifacts).forEach(function (platform) {
+      app.artifacts[platform].forEach(function (artifact) {
+        if (artifact.id === artifactId) hit = artifact;
       });
+    });
+    return hit;
+  }
 
-      var links = el('div', { class: 'app-links' });
-      if (app.homepage) {
-        links.appendChild(
-          el('a', { href: app.homepage, target: '_blank', rel: 'noreferrer', text: '主页' }),
-        );
-      }
-      if (app.repoUrl) {
-        links.appendChild(
-          el('a', { href: app.repoUrl, target: '_blank', rel: 'noreferrer', text: '源码' }),
-        );
-      }
+  function platformCount(platform) {
+    return state.apps.filter(function (app) {
+      return (app.artifacts[platform] || []).length > 0;
+    }).length;
+  }
 
-      appsBox.appendChild(
-        el('article', { class: 'app-card' }, [
-          el('div', { class: 'app-head' }, [icon, title, version]),
-          el('p', { class: 'app-desc', text: app.description || '暂无描述' }),
-          downloads,
-          links,
-        ]),
+  function versionFor(app) {
+    if (state.filter !== 'all') {
+      var release = app.releases[state.filter];
+      if (release) return release.versionName;
+    }
+    var best = null;
+    Object.keys(app.releases).forEach(function (platform) {
+      var current = app.releases[platform];
+      if (!best || current.versionCode > best.versionCode) best = current;
+    });
+    return best ? best.versionName : '';
+  }
+
+  function iconFor(app) {
+    if (app.iconUrl) {
+      return '<img src="' + esc(app.iconUrl) + '" alt="" loading="lazy" />';
+    }
+    var initial = (app.name || '?').trim().charAt(0).toUpperCase();
+    return (
+      '<span class="ico" style="background:' +
+      esc(colorFor(app.appKey)) +
+      '">' +
+      esc(initial) +
+      '</span>'
+    );
+  }
+
+  function renderTabs() {
+    var loaded = !state.loading && !state.error && state.apps.length > 0;
+    var counts = {
+      all: state.apps.length,
+      darwin: platformCount('darwin'),
+      win32: platformCount('win32'),
+      android: platformCount('android'),
+    };
+    tabsBox.innerHTML = TABS.map(function (tab) {
+      var key = tab[0];
+      return (
+        '<button class="tab" role="tab" data-p="' +
+        key +
+        '" aria-selected="' +
+        String(state.filter === key) +
+        '">' +
+        esc(tab[1]) +
+        (loaded ? '<b>' + counts[key] + '</b>' : '') +
+        '</button>'
       );
+    }).join('');
+
+    Array.prototype.forEach.call(tabsBox.querySelectorAll('.tab'), function (el) {
+      el.addEventListener('click', function () {
+        var key = el.dataset.p;
+        state.filter = key;
+        /* 只有点具体平台时才改变下载入口的平台；「全部」只影响列表 */
+        if (key !== 'all') {
+          state.platform = key;
+          writeStore(STORE_PLATFORM, key);
+        }
+        writeStore(STORE_FILTER, key);
+        render();
+      });
     });
   }
 
-  var PLATFORM_LABELS = {
-    android: 'Android',
-    darwin: 'macOS',
-    win32: 'Windows',
-    linux: 'Linux',
-  };
-
-  function platformLabel(platform) {
-    return PLATFORM_LABELS[platform] || platform || '桌面';
+  function downloadLinks(app) {
+    var platform = state.platform;
+    var arts = app.artifacts[platform] || [];
+    if (!arts.length) {
+      return (
+        '<span class="dl" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>'
+      );
+    }
+    var prefix = state.filter === 'all' ? LABELS[platform] + ' ' : '';
+    return arts
+      .map(function (artifact) {
+        var arch = arts.length > 1 ? artifact.arch + ' ' : '';
+        return (
+          '<a class="dl" href="' +
+          esc(artifact.downloadUrl) +
+          '" rel="noreferrer" data-app="' +
+          esc(app.appKey) +
+          '" data-artifact="' +
+          artifact.id +
+          '">↓ ' +
+          esc(prefix + '.' + artifact.format) +
+          ' ' +
+          esc(arch) +
+          '<b>' +
+          formatBytes(artifact.size) +
+          '</b></a>'
+        );
+      })
+      .join('');
   }
 
-  function archLabel(platform, arch) {
-    if (!arch) return 'Universal';
-    if (arch === 'universal') return 'Universal';
-    if (arch === 'arm64') return platform === 'darwin' ? 'Apple Silicon' : 'arm64';
-    if (arch === 'x64') return platform === 'darwin' ? 'Intel' : 'x64';
-    return arch;
-  }
-
-  var heroTarget = null;
-
-  function updateHero() {
-    var isAndroid = state.platform === 'android';
-    var target = state.apps.filter(function (app) {
-      return app.latest && app.latest.artifacts.length &&
-        (isAndroid || app.appKey === 'vakaohub');
-    })[0];
-    if (!target) {
-      heroTarget = null;
+  function renderGrid() {
+    if (state.loading) {
+      grid.innerHTML = '<div class="empty">正在读取软件目录…</div>';
+      return;
+    }
+    if (state.error) {
+      grid.innerHTML = '<div class="empty">' + esc(state.error) + '</div>';
       return;
     }
 
-    var artifact = target.latest.artifacts[0];
-    heroTarget = artifact ? { app: target, artifact: artifact } : null;
-    var link = document.getElementById('hero-download');
-    if (link && artifact) link.href = artifact.downloadUrl;
+    var visible =
+      state.filter === 'all'
+        ? state.apps
+        : state.apps.filter(function (app) {
+            return (app.artifacts[state.filter] || []).length > 0;
+          });
 
-    var label = document.getElementById('hero-download-label');
-    if (label && artifact) {
-      label.textContent = '下载 ' + platformLabel(artifact.platform) + ' 版';
+    if (!visible.length) {
+      grid.innerHTML = '<div class="empty">该平台暂无发布版本。</div>';
+      return;
     }
 
-    var version = document.getElementById('hero-version');
-    if (version) version.textContent = 'v' + target.latest.versionName;
-
-    var platform = document.getElementById('hero-platform');
-    if (platform && artifact) {
-      platform.textContent =
-        platformLabel(artifact.platform) +
-        ' · ' +
-        archLabel(artifact.platform, artifact.arch) +
-        ' · ' +
-        artifact.format.toUpperCase();
-    }
+    grid.innerHTML = visible
+      .map(function (app) {
+        var version = versionFor(app);
+        var meta = esc(app.description || '暂无描述');
+        if (version) meta += ' · v' + esc(version);
+        if (app.homepage) {
+          meta +=
+            ' · <a class="home" href="' +
+            esc(app.homepage) +
+            '" target="_blank" rel="noreferrer">主页<i>↗</i></a>';
+        }
+        return (
+          '<div class="item">' +
+          iconFor(app) +
+          '<div><h3>' +
+          esc(app.name) +
+          (app.appKey === 'vakaohub' ? '<em>启动器</em>' : '') +
+          '</h3><p>' +
+          meta +
+          '</p></div>' +
+          '<div class="dls">' +
+          downloadLinks(app) +
+          '</div></div>'
+        );
+      })
+      .join('');
   }
 
-  function updateStats() {
-    var count = state.totalApps || state.apps.length;
-    var stat = document.getElementById('stat-apps');
-    if (stat) stat.textContent = String(count).padStart(2, '0');
-    var summary = document.getElementById('float-summary');
-    if (summary && state.totalApps) {
-      summary.textContent = state.totalApps + ' apps · ' + state.totalPlatforms + ' platforms';
+  function renderHero() {
+    if (state.loading) {
+      kicker.textContent = 'VaKao Hub · SOFTWARE SUITE';
+      specOs.textContent = '正在读取目录';
+      heroCta.innerHTML = '<span class="btn" aria-disabled="true">读取目录中…</span>';
+      navCta.innerHTML = '<span class="mini" aria-disabled="true">读取中…</span>';
+      return;
     }
+
+    if (state.error) {
+      kicker.textContent = 'VaKao Hub · SOFTWARE SUITE';
+      specOs.textContent = '版本信息暂不可用';
+      heroCta.innerHTML = '<span class="btn" aria-disabled="true">目录暂不可用</span>';
+      navCta.innerHTML = '<span class="mini" aria-disabled="true">下载启动器</span>';
+      return;
+    }
+
+    var launcher = findApp('vakaohub');
+    var platform = state.platform;
+    if (!launcher) {
+      kicker.textContent = 'VaKao Hub · SOFTWARE SUITE';
+      specOs.textContent = '版本信息暂不可用';
+      heroCta.innerHTML = '<span class="btn" aria-disabled="true">暂无可用版本</span>';
+      navCta.innerHTML = '<span class="mini" aria-disabled="true">下载启动器</span>';
+      return;
+    }
+
+    var arts = launcher.artifacts[platform] || [];
+    var artifact = arts[0];
+    var release = launcher.releases[platform];
+    var desktopRelease =
+      launcher.releases.darwin || launcher.releases.win32 || null;
+
+    if (artifact && release) {
+      kicker.textContent =
+        osText(platform, artifact.minOs) + ' · v' + release.versionName;
+      specOs.textContent =
+        archLabel(platform, artifact.arch) + ' · ' + artifact.format.toUpperCase();
+      heroCta.innerHTML =
+        '<a class="btn btn-gold" href="' +
+        esc(artifact.downloadUrl) +
+        '" data-app="' +
+        esc(launcher.appKey) +
+        '" data-artifact="' +
+        artifact.id +
+        '">下载 for ' +
+        esc(LABELS[platform]) +
+        ' <span class="m">' +
+        formatBytes(artifact.size) +
+        '</span></a>';
+      navCta.innerHTML =
+        '<a class="mini" href="' +
+        esc(artifact.downloadUrl) +
+        '" data-app="' +
+        esc(launcher.appKey) +
+        '" data-artifact="' +
+        artifact.id +
+        '">下载启动器</a>';
+      return;
+    }
+
+    /* Android / Linux 没有启动器产物：置灰，不放假链接 */
+    var desktopVersion = desktopRelease ? ' · v' + desktopRelease.versionName : '';
+    kicker.textContent = 'macOS / Windows' + desktopVersion;
+    specOs.textContent = '仅桌面端 · 无 ' + LABELS[platform] + ' 包';
+    heroCta.innerHTML =
+      '<span class="btn" aria-disabled="true">启动器暂无 ' + esc(LABELS[platform]) + ' 版</span>';
+    navCta.innerHTML =
+      '<span class="mini" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>';
   }
 
-  async function loadTotals() {
-    try {
-      var response = await fetch(apiBase + '/catalog/summary');
-      var body = await response.json();
-      var data = body && body.data ? body.data : null;
-      if (!data) return;
-      state.totalApps = data.totalApps || 0;
-      state.totalPlatforms = data.totalPlatforms || 0;
-      updateStats();
-    } catch {
-      /* keep current-platform count */
-    }
+  function render() {
+    renderTabs();
+    renderGrid();
+    renderHero();
   }
 
-  var activeRequest = null;
+  var FEATURES = [
+    { t: '一个目录，所有版本', d: 'Android 与 macOS 共用一套应用、版本与产物模型。' },
+    { t: '发布状态可追溯', d: '灰度、全量、强更与回滚都在后台留痕。' },
+    { t: '安装前后校验', d: 'SHA-256 与 macOS codesign 完整性检查。' },
+    { t: '安静的更新', d: '启动即检查，不弹窗轰炸，也不静默替换正在使用的版本。' },
+  ];
 
-  function load() {
-    // 切换平台/架构时取消上一次请求，避免慢响应覆盖新数据
-    if (activeRequest) activeRequest.abort();
-    var controller = new AbortController();
-    activeRequest = controller;
+  featBox.innerHTML = FEATURES.map(function (feature) {
+    return '<div><h3>' + esc(feature.t) + '</h3><p>' + esc(feature.d) + '</p></div>';
+  }).join('');
 
-    state.loading = true;
-    state.error = '';
-    renderStatus();
-    renderApps();
+  /* ---------- 数据加载：三平台并行，任一失败按该平台无数据处理 ---------- */
+  var lastError = '';
 
+  function fetchPlatform(platform) {
     var url =
       apiBase +
       '/catalog?platform=' +
-      encodeURIComponent(state.platform) +
-      '&arch=' +
-      encodeURIComponent(state.arch);
-
-    fetch(url, { signal: controller.signal })
+      encodeURIComponent(platform) +
+      '&arch=universal';
+    return fetch(url)
       .then(function (response) {
         return response.json().then(function (body) {
           if (!response.ok || body.code !== 200) {
             throw new Error(body && body.message ? body.message : 'HTTP ' + response.status);
           }
-          return body.data;
+          return { platform: platform, apps: (body.data && body.data.apps) || [] };
         });
       })
-      .then(function (data) {
-        if (activeRequest !== controller) return;
-        state.apps = data.apps || [];
-        updateHero();
-        updateStats();
-      })
       .catch(function (error) {
-        if (error && error.name === 'AbortError') return;
-        if (activeRequest !== controller) return;
-        state.apps = [];
-        state.error = '加载失败：' + error.message;
-      })
-      .finally(function () {
-        if (activeRequest !== controller) return;
-        activeRequest = null;
-        state.loading = false;
-        renderStatus();
-        renderApps();
+        lastError = error && error.message ? error.message : '网络异常';
+        return null;
       });
   }
 
-  archSelect.addEventListener('change', function () {
-    state.arch = archSelect.value;
-    load();
-  });
-
-  searchInput.addEventListener('input', function () {
-    state.query = searchInput.value.trim();
-    renderApps();
-  });
-
-  document.getElementById('refresh').addEventListener('click', load);
-  document.getElementById('api-label').textContent = apiBase;
-
-  // 首屏按钮的 href 会随平台切换，这里只挂一次监听，点击时读取当前目标。
-  var heroDownload = document.getElementById('hero-download');
-  if (heroDownload) {
-    heroDownload.addEventListener('click', function () {
-      if (heroTarget) reportDownloadStart(heroTarget.app, heroTarget.artifact);
+  function merge(results) {
+    var map = {};
+    results.forEach(function (result) {
+      if (!result) return;
+      result.apps.forEach(function (app) {
+        var entry = map[app.appKey];
+        if (!entry) {
+          entry = map[app.appKey] = {
+            appKey: app.appKey,
+            name: app.name,
+            description: app.description,
+            iconUrl: app.iconUrl,
+            homepage: app.homepage,
+            artifacts: {},
+            releases: {},
+          };
+        }
+        var latest = app.latest;
+        if (!latest) return;
+        entry.releases[result.platform] = {
+          releaseId: latest.id,
+          versionCode: latest.versionCode,
+          versionName: latest.versionName,
+        };
+        entry.artifacts[result.platform] = (latest.artifacts || []).map(function (artifact) {
+          return {
+            id: artifact.id,
+            platform: artifact.platform,
+            arch: artifact.arch,
+            format: artifact.format,
+            size: artifact.size,
+            minOs: artifact.minOs,
+            downloadUrl: artifact.downloadUrl,
+          };
+        });
+      });
     });
+
+    return Object.keys(map)
+      .map(function (key) {
+        return map[key];
+      })
+      .sort(function (a, b) {
+        if (a.appKey === 'vakaohub') return -1;
+        if (b.appKey === 'vakaohub') return 1;
+        return a.appKey < b.appKey ? -1 : a.appKey > b.appKey ? 1 : 0;
+      });
   }
 
-  renderPlatforms();
-  renderStatus();
+  function load() {
+    state.loading = true;
+    state.error = '';
+    lastError = '';
+    render();
+
+    Promise.all(PLATFORMS.map(fetchPlatform))
+      .then(function (results) {
+        var ok = results.filter(Boolean);
+        if (!ok.length) throw new Error(lastError || '网络异常');
+        state.apps = merge(results);
+      })
+      .catch(function (error) {
+        state.apps = [];
+        state.error = '加载失败：' + (error && error.message ? error.message : '网络异常');
+      })
+      .then(function () {
+        state.loading = false;
+        render();
+      });
+  }
+
+  /* ---------- 下载点击上报（事件委托，首屏/顶栏/列表共用） ---------- */
+  document.addEventListener('click', function (event) {
+    var node = event.target;
+    while (node && node !== document) {
+      if (node.tagName === 'A' && node.getAttribute('data-app')) break;
+      node = node.parentNode;
+    }
+    if (!node || node === document) return;
+    var app = findApp(node.getAttribute('data-app'));
+    var artifact = findArtifact(app, Number(node.getAttribute('data-artifact')));
+    if (app && artifact) reportDownloadStart(app, artifact);
+  });
+
+  /* ---------- 深浅色 ---------- */
+  var themeBtn = document.getElementById('theme-btn');
+
+  function syncThemeBtn() {
+    var isLight = document.documentElement.dataset.theme === 'light';
+    themeBtn.setAttribute('aria-label', isLight ? '切换到暗色' : '切换到亮色');
+    themeBtn.title = isLight ? '切换到暗色' : '切换到亮色';
+  }
+
+  themeBtn.addEventListener('click', function () {
+    var next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    writeStore(STORE_THEME, next);
+    syncThemeBtn();
+  });
+
+  var mq = window.matchMedia('(prefers-color-scheme: light)');
+  var onSchemeChange = function (event) {
+    if (readStore(STORE_THEME)) return;
+    document.documentElement.dataset.theme = event.matches ? 'light' : 'dark';
+    syncThemeBtn();
+  };
+  if (mq.addEventListener) mq.addEventListener('change', onSchemeChange);
+  else if (mq.addListener) mq.addListener(onSchemeChange);
+
+  syncThemeBtn();
+  if (apiLabel) apiLabel.textContent = apiBase;
+  render();
   load();
-  loadTotals();
 })();
