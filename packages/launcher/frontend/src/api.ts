@@ -2,6 +2,9 @@ export interface Settings {
   baseUrl: string;
 }
 
+/** 启动器自身的 appKey：只有它允许在运行中执行更新（走自更新替换流程）。 */
+export const SELF_APP_KEY = 'vakaohub';
+
 export interface Progress {
   appKey: string;
   phase: string;
@@ -69,6 +72,7 @@ interface WailsApp {
   Uninstall(appKey: string, deleteData: boolean): Promise<void>;
   Reveal(appKey: string): Promise<void>;
   OpenURL(url: string): void;
+  Quit(): void;
 }
 
 export function appApi(): WailsApp {

@@ -126,3 +126,8 @@ func launchLocal(path string) error {
 	}
 	return nil
 }
+
+// SelfUpdate Windows 版暂不支持：运行中的 exe 无法被替换，需退出后手动安装。
+func SelfUpdate(format, filePath string) error {
+	return fmt.Errorf("Windows 版启动器暂不支持自动更新，请退出后手动下载安装")
+}

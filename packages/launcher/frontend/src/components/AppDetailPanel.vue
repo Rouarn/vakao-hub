@@ -35,10 +35,10 @@
             </div>
 
             <div class="detail-actions">
-              <button class="action" :disabled="busy || !supportsOs" @click="$emit('primary-action', selected)">
-                <template v-if="selected.running">当前运行</template>
+              <button class="action" :disabled="busy || !supportsOs || (selected.running && !isSelf(selected))" @click="$emit('primary-action', selected)">
+                <template v-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
+                <template v-else-if="selected.running">当前运行</template>
                 <template v-else-if="!selected.installed">安装</template>
-                <template v-else-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
                 <template v-else>打开</template>
               </button>
               <button class="more detail-more" @click.stop="$emit('toggle-menu', selected)">⋯</button>
@@ -163,10 +163,15 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { AppView } from '../api';
+import { SELF_APP_KEY, type AppView } from '../api';
 import type { DetailMeta } from '../lib/meta';
 import { appColor, releaseUrl } from '../lib/theme';
 import { formatBytes, formatDate, initial } from '../lib/format';
+
+// 启动器自身允许在运行中更新，其它运行中的应用不能覆盖安装。
+function isSelf(app: AppView): boolean {
+  return app.appKey === SELF_APP_KEY;
+}
 
 const props = defineProps<{
   selected: AppView;

@@ -119,7 +119,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { appApi, type AppView, type Progress, type Settings } from './api';
+import { appApi, SELF_APP_KEY, type AppView, type Progress, type Settings } from './api';
 import type { DetailMeta } from './lib/meta';
 
 import AppCard from './components/AppCard.vue';
@@ -299,7 +299,9 @@ async function load(): Promise<void> {
 }
 
 async function install(app: AppView): Promise<void> {
-  if (app.running) return;
+  // 其它应用运行中不能覆盖安装；启动器自身走自更新替换流程，允许在运行中执行。
+  const selfUpdate = app.appKey === SELF_APP_KEY;
+  if (app.running && !selfUpdate) return;
   if (!supportsOs(app)) {
     error.value = `该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`;
     return;
@@ -309,6 +311,10 @@ async function install(app: AppView): Promise<void> {
   error.value = '';
   try {
     await api().Install(app.appKey, app.artifactID);
+    if (selfUpdate) {
+      restartForSelfUpdate();
+      return;
+    }
     await load();
   } catch (cause) {
     error.value = (cause as Error).message;
@@ -319,10 +325,25 @@ async function install(app: AppView): Promise<void> {
   }
 }
 
+// 自更新：新包已落到缓存，后台脚本要等本进程退出才替换 bundle，因此主动重启。
+function restartForSelfUpdate(): void {
+  setTimeout(() => {
+    try {
+      api().Quit();
+    } catch {
+      // 开发模式（浏览器）没有 Wails 运行时，保持窗口即可。
+    }
+  }, 900);
+}
+
 async function updateAll(): Promise<void> {
   if (updatingAll.value) return;
   updatingAll.value = true;
-  const targets = apps.value.filter((app) => app.hasUpdate && !app.running);
+  // 启动器自身永远处于运行中，只有它允许被「全部更新」带进替换流程；
+  // 排到最后，避免自身重启打断其它应用的更新。
+  const targets = apps.value
+    .filter((app) => app.hasUpdate && (!app.running || app.appKey === SELF_APP_KEY))
+    .sort((a, b) => Number(a.appKey === SELF_APP_KEY) - Number(b.appKey === SELF_APP_KEY));
   for (const app of targets) {
     await install(app);
   }
@@ -339,7 +360,8 @@ async function primaryAction(app: AppView): Promise<void> {
     error.value = `该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`;
     return;
   }
-  if (app.running) return;
+  // 启动器自身始终在运行，但可以走自更新流程。
+  if (app.running && app.appKey !== SELF_APP_KEY) return;
   if (!app.installed || app.hasUpdate) {
     await install(app);
   } else {

@@ -17,6 +17,8 @@ export function Launch(arg1:string):Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
 
+export function Quit():Promise<void>;
+
 export function Reveal(arg1:string):Promise<void>;
 
 export function SaveSettings(arg1:string):Promise<main.Settings>;

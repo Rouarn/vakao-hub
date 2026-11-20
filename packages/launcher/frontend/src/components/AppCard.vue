@@ -38,8 +38,8 @@
           <span class="provider-badge">由 VAKAO 提供</span>
         </div>
       </div>
-      <span v-if="app.running" class="state running">当前运行</span>
-      <span v-else-if="app.hasUpdate" class="state update">有可用更新</span>
+      <span v-if="app.hasUpdate" class="state update">有可用更新</span>
+      <span v-else-if="app.running" class="state running">当前运行</span>
       <span v-else-if="app.installed" class="state installed">已安装</span>
       <span v-else class="state available">可安装</span>
     </div>
@@ -63,12 +63,12 @@
     <div class="card-bottom">
       <button
         class="action"
-        :disabled="busy || updatingAll || !supportsOs"
+        :disabled="busy || updatingAll || !supportsOs || (app.running && !isSelf(app))"
         @click.stop="$emit('primary-action', app)"
       >
-        <template v-if="app.running">当前运行</template>
+        <template v-if="app.hasUpdate">更新至 {{ app.latestVersion }}</template>
+        <template v-else-if="app.running">当前运行</template>
         <template v-else-if="!app.installed">安装</template>
-        <template v-else-if="app.hasUpdate">更新至 {{ app.latestVersion }}</template>
         <template v-else>打开</template>
       </button>
       <button class="more" title="更多" @click.stop="$emit('toggle-menu', app)">⋯</button>
@@ -94,9 +94,14 @@
 </template>
 
 <script setup lang="ts">
-import type { AppView, Progress } from '../api';
+import { SELF_APP_KEY, type AppView, type Progress } from '../api';
 import { appColor } from '../lib/theme';
 import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
+
+// 启动器自身始终处于运行中，但允许在运行中更新（由主进程走后台替换流程）。
+function isSelf(app: AppView): boolean {
+  return app.appKey === SELF_APP_KEY;
+}
 
 defineProps<{
   app: AppView;

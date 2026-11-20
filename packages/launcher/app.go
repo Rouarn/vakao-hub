@@ -325,9 +325,6 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 	if app == nil || artifact == nil {
 		return store.Installed{}, fmt.Errorf("未找到该应用或产物")
 	}
-	if appKey == "vakaohub" {
-		return store.Installed{}, fmt.Errorf("启动器不能通过自身安装；请下载新版本手动替换")
-	}
 	if artifact.Platform == "darwin" && artifact.MinOs != "" {
 		if current := hostOSVersion(); current != "" && isNewerVersion(artifact.MinOs, current) {
 			return store.Installed{}, fmt.Errorf("该版本需要 macOS %s 或更高版本，当前系统为 %s", artifact.MinOs, current)
@@ -376,6 +373,27 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 		message := fmt.Sprintf("校验失败：期望 %s，实际 %s", artifact.SHA256, sha)
 		a.emit(appKey, "error", -1, message)
 		return store.Installed{}, fmt.Errorf("%s", message)
+	}
+
+	// 启动器更新自身：运行中的 bundle 不能就地覆盖，交给后台脚本在本进程退出后替换。
+	if appKey == "vakaohub" {
+		a.emit(appKey, "installing", 100, "正在准备替换启动器")
+		if err := install.SelfUpdate(artifact.Format, filePath); err != nil {
+			a.onceEvent(eventKey+":install_fail", withType(event, eventInstallFail))
+			a.emit(appKey, "error", -1, err.Error())
+			return store.Installed{}, err
+		}
+		a.onceEvent(eventKey+":install_success", withType(event, eventInstallSuccess))
+		current, _, _ := install.CurrentBundle()
+		a.emit(appKey, "done", 100, "更新已就绪，重启启动器后完成替换")
+		return store.Installed{
+			AppKey:      appKey,
+			Name:        app.Name,
+			VersionName: app.Latest.VersionName,
+			VersionCode: app.Latest.VersionCode,
+			InstallPath: current,
+			InstalledAt: time.Now().Unix(),
+		}, nil
 	}
 
 	existingPath := ""
@@ -509,6 +527,13 @@ func (a *App) Reveal(appKey string) error {
 func (a *App) OpenURL(url string) {
 	if a.ctx != nil {
 		wruntime.BrowserOpenURL(a.ctx, url)
+	}
+}
+
+// Quit 由前端在自更新后调用：退出进程让后台脚本完成 bundle 替换并重新打开新版本。
+func (a *App) Quit() {
+	if a.ctx != nil {
+		wruntime.Quit(a.ctx)
 	}
 }
 
