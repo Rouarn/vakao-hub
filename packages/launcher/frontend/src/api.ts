@@ -1,5 +1,7 @@
 export interface Settings {
   baseUrl: string;
+  /** 用户自定义的安装目录；空串表示使用平台默认目录（macOS 为 ~/Applications）。 */
+  installDir: string;
 }
 
 /** 启动器自身的 appKey：只有它允许在运行中执行更新（走自更新替换流程）。 */
@@ -65,7 +67,9 @@ interface WailsApp {
   GetAppVersion(): Promise<string>;
   GetDefaultBaseURL(): Promise<string>;
   GetSettings(): Promise<Settings>;
-  SaveSettings(baseUrl: string): Promise<Settings>;
+  SaveSettings(baseUrl: string, installDir: string): Promise<Settings>;
+  GetDefaultInstallDir(): Promise<string>;
+  SelectInstallDir(): Promise<string>;
   GetCatalog(): Promise<CatalogView>;
   Install(appKey: string, artifactID: number): Promise<Installed>;
   Launch(appKey: string): Promise<void>;

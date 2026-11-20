@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"vakaohub/launcher/internal/install"
 )
 
 const defaultBaseURL = "https://dist.woyuxiaji.cn/api/v1"
@@ -16,6 +18,9 @@ type Settings struct {
 	// DeviceID 是本机匿名标识，首次启动生成后固定在设置文件里，
 	// 只用于事件上报的去重与灰度分桶，不含任何硬件信息。
 	DeviceID string `json:"deviceId,omitempty"`
+	// InstallDir 是用户自定义的应用安装目录，空值表示平台默认目录
+	//（macOS 为 ~/Applications）。已安装应用不会因修改它而迁移。
+	InstallDir string `json:"installDir,omitempty"`
 }
 
 // newDeviceID 生成 16 字节随机数的十六进制串；读取系统随机源失败时返回空串，
@@ -52,6 +57,11 @@ func loadSettings() Settings {
 	settings.BaseURL = strings.TrimRight(strings.TrimSpace(settings.BaseURL), "/")
 	if settings.BaseURL == "" {
 		settings.BaseURL = defaultBaseURL
+	}
+	// 目录不存在或不可写时回落到默认目录，避免带着坏配置启动后处处装不上。
+	settings.InstallDir = strings.TrimSpace(settings.InstallDir)
+	if err := install.ValidateInstallDir(settings.InstallDir); err != nil {
+		settings.InstallDir = ""
 	}
 	return settings
 }

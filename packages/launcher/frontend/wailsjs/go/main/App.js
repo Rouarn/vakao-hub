@@ -14,6 +14,10 @@ export function GetDefaultBaseURL() {
   return window['go']['main']['App']['GetDefaultBaseURL']();
 }
 
+export function GetDefaultInstallDir() {
+  return window['go']['main']['App']['GetDefaultInstallDir']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
@@ -38,8 +42,12 @@ export function Reveal(arg1) {
   return window['go']['main']['App']['Reveal'](arg1);
 }
 
-export function SaveSettings(arg1) {
-  return window['go']['main']['App']['SaveSettings'](arg1);
+export function SaveSettings(arg1, arg2) {
+  return window['go']['main']['App']['SaveSettings'](arg1, arg2);
+}
+
+export function SelectInstallDir() {
+  return window['go']['main']['App']['SelectInstallDir']();
 }
 
 export function Uninstall(arg1, arg2) {

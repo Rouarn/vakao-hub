@@ -89,6 +89,7 @@
 
     <SettingsModal
       v-model:base-url="draftBaseUrl"
+      v-model:install-dir="draftInstallDir"
       v-model:refresh-minutes="refreshMinutes"
       :visible="settingsVisible"
       :theme-mode="themeMode"
@@ -99,9 +100,14 @@
       :host-os-version="hostOsVersion"
       :arch="arch"
       :launcher-version="launcherVersion"
+      :default-install-dir="defaultInstallDir"
+      :install-dir-editable="installDirEditable"
+      :settings-error="settingsError"
       @close="settingsVisible = false"
       @save="saveSettings"
       @reset="resetBaseUrl"
+      @select-install-dir="chooseInstallDir"
+      @reset-install-dir="draftInstallDir = ''"
       @theme-mode="setThemeMode"
       @refresh-changed="saveRefreshInterval"
       @refresh-now="load"
@@ -153,7 +159,7 @@ const contentRef = ref<HTMLElement | null>(null);
 let initialScrollDone = false;
 const { themeMode, setThemeMode, toggleTheme } = useTheme();
 const refreshMinutes = ref<number>(initialRefreshMinutes());
-const settings = ref<Settings>({ baseUrl: '' });
+const settings = ref<Settings>({ baseUrl: '', installDir: '' });
 const loading = ref(false);
 const saving = ref(false);
 const updatingAll = ref(false);
@@ -161,9 +167,14 @@ const error = ref('');
 const busyKeys = ref<Record<string, boolean>>({});
 const progress = ref<Record<string, Progress>>({});
 const settingsVisible = ref(false);
+const settingsError = ref('');
 const uninstallTarget = ref<AppView | null>(null);
 const deleteUninstallData = ref(false);
 const draftBaseUrl = ref('');
+const draftInstallDir = ref('');
+const defaultInstallDir = ref('~/Applications');
+// Windows 的安装位置由安装包决定，设置项只展示不可编辑。
+const installDirEditable = computed(() => platform.value === 'darwin');
 const search = ref('');
 const sortBy = ref<'recent' | 'name' | 'status'>('recent');
 const gridMode = ref(true);
@@ -445,18 +456,39 @@ function closeMenu(): void {
 
 function openSettings(): void {
   draftBaseUrl.value = settings.value.baseUrl;
+  draftInstallDir.value = settings.value.installDir;
+  settingsError.value = '';
   settingsVisible.value = true;
+  // 默认目录由主进程给，避免前端再写一份 ~/Applications。
+  api()
+    .GetDefaultInstallDir()
+    .then((value) => {
+      if (value) defaultInstallDir.value = value;
+    })
+    .catch(() => undefined);
+}
+
+// 目录选择器返回空串代表用户取消；选择阶段就做可写校验，错误留在弹窗里展示。
+async function chooseInstallDir(): Promise<void> {
+  settingsError.value = '';
+  try {
+    const dir = await api().SelectInstallDir();
+    if (dir) draftInstallDir.value = dir;
+  } catch (cause) {
+    settingsError.value = (cause as Error).message;
+  }
 }
 
 async function saveSettings(): Promise<void> {
   saving.value = true;
   error.value = '';
+  settingsError.value = '';
   try {
-    settings.value = await api().SaveSettings(draftBaseUrl.value);
+    settings.value = await api().SaveSettings(draftBaseUrl.value, draftInstallDir.value);
     settingsVisible.value = false;
     await load();
   } catch (cause) {
-    error.value = (cause as Error).message;
+    settingsError.value = (cause as Error).message;
   } finally {
     saving.value = false;
   }

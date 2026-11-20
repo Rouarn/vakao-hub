@@ -64,6 +64,7 @@
               spellcheck="false"
               placeholder="https://dist.woyuxiaji.cn/api/v1"
             />
+            <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
             <div class="settings-actions">
               <button class="settings-secondary" @click="$emit('reset')">恢复默认</button>
               <button class="settings-primary" :disabled="saving" @click="$emit('save')">保存</button>
@@ -77,10 +78,34 @@
             <div class="settings-row settings-row-start">
               <div>
                 <strong>应用安装目录</strong>
-                <span>新安装的应用会放在这里</span>
+                <span>新安装的应用会放在这里，已安装的应用不会移动</span>
               </div>
             </div>
-            <code class="settings-path">~/Applications</code>
+            <div class="settings-path-row">
+              <input
+                v-model="installDir"
+                class="settings-input settings-path-input"
+                spellcheck="false"
+                :disabled="!installDirEditable"
+                :placeholder="defaultInstallDir"
+              />
+              <button
+                class="settings-secondary"
+                :disabled="!installDirEditable"
+                @click="$emit('select-install-dir')"
+              >
+                选择…
+              </button>
+            </div>
+            <div v-if="installDirEditable" class="settings-actions">
+              <button class="settings-secondary" @click="$emit('reset-install-dir')">恢复默认</button>
+            </div>
+            <p v-if="!installDirEditable" class="settings-note">
+              Windows 由安装包决定位置，此项仅 macOS 生效。
+            </p>
+            <p v-else class="settings-note">
+              可选用户主目录内或 /Applications 下的目录；桌面、文稿等受保护目录会触发系统授权。
+            </p>
           </section>
 
           <section class="settings-card">
@@ -125,15 +150,21 @@ defineProps<{
   hostOsVersion: string;
   arch: string;
   launcherVersion: string;
+  defaultInstallDir: string;
+  installDirEditable: boolean;
+  settingsError: string;
 }>();
 
 const baseUrl = defineModel<string>('baseUrl', { required: true });
+const installDir = defineModel<string>('installDir', { required: true });
 const refreshMinutes = defineModel<number>('refreshMinutes', { required: true });
 
 defineEmits<{
   close: [];
   save: [];
   reset: [];
+  'select-install-dir': [];
+  'reset-install-dir': [];
   'theme-mode': [mode: ThemeMode];
   'refresh-changed': [];
   'refresh-now': [];

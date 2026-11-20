@@ -14,18 +14,76 @@ import (
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(format, filePath, appKey, appName, targetPath string) (string, error) {
+func installLocal(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
 	case contract.FormatDMG:
-		return installDMG(filePath, targetPath)
+		return installDMG(filePath, targetPath, installDir)
 	case contract.FormatZIP:
-		return installZip(filePath, targetPath)
+		return installZip(filePath, targetPath, installDir)
 	default:
 		return "", fmt.Errorf("macOS 暂不支持 %s 格式，请上传 dmg 或 zip", format)
 	}
 }
 
-func installZip(filePath, targetPath string) (string, error) {
+// DefaultInstallDir 返回默认安装目录：~/Applications。
+func DefaultInstallDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Applications")
+}
+
+// allowedInstallDir 判断目录能否作为安装位置：用户主目录内部或 /Applications 之下。
+// 外置卷（/Volumes）与系统目录都不在主目录内，这里自然被拒绝。
+func allowedInstallDir(dir string) bool {
+	clean := filepath.Clean(dir)
+	if clean == "/Applications" || strings.HasPrefix(clean, "/Applications"+string(os.PathSeparator)) {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	if clean == home {
+		return false
+	}
+	return strings.HasPrefix(clean, home+string(os.PathSeparator))
+}
+
+// ValidateInstallDir 校验用户选择的安装目录：必须已存在、可写且在允许范围内。
+// 空串表示使用默认目录，直接通过。
+func ValidateInstallDir(dir string) error {
+	dir = ExpandDir(dir)
+	if dir == "" {
+		return nil
+	}
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("安装目录必须是绝对路径")
+	}
+	if !allowedInstallDir(dir) {
+		return fmt.Errorf("只能选择用户主目录内或 /Applications 下的目录")
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("安装目录不存在：%s", dir)
+	}
+	if err := syscall.Access(dir, 0x2 /* W_OK */); err != nil {
+		return fmt.Errorf("安装目录不可写：%s", dir)
+	}
+	return nil
+}
+
+// scanInstallDir 是用户配置的安装目录，参与已安装应用扫描。
+var scanInstallDir string
+
+// SetInstallDir 记住配置的安装目录并失效扫描缓存；传空串恢复默认。
+func SetInstallDir(dir string) {
+	scanInstallDir = ExpandDir(dir)
+	InvalidateIndex()
+}
+
+func installZip(filePath, targetPath, installDir string) (string, error) {
 	tmp, err := os.MkdirTemp("", "vakaohub-unzip-*")
 	if err != nil {
 		return "", err
@@ -36,10 +94,10 @@ func installZip(filePath, targetPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return copyToApplications(appPath, targetPath)
+	return copyToApplications(appPath, targetPath, installDir)
 }
 
-func installDMG(filePath, targetPath string) (string, error) {
+func installDMG(filePath, targetPath, installDir string) (string, error) {
 	tmp, err := os.MkdirTemp("", "vakaohub-dmg-*")
 	if err != nil {
 		return "", err
@@ -50,7 +108,7 @@ func installDMG(filePath, targetPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return copyToApplications(appPath, targetPath)
+	return copyToApplications(appPath, targetPath, installDir)
 }
 
 // extractApp 把安装包里的 .app 解到 dest，返回解出的 .app 路径。
@@ -124,32 +182,22 @@ func findApp(root string) (string, error) {
 	return found, nil
 }
 
-func copyToApplications(appPath, targetPath string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+// copyToApplications 把解出的 .app 放进安装目录。
+// targetPath 非空表示升级已有安装：保持原位置不搬家，但该位置仍须在允许范围内。
+func copyToApplications(appPath, targetPath, installDir string) (string, error) {
+	dir := ExpandDir(installDir)
+	if dir == "" {
+		dir = DefaultInstallDir()
 	}
-	destinationDir := filepath.Join(home, "Applications")
-	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 
-	target := filepath.Join(destinationDir, filepath.Base(appPath))
+	target := filepath.Join(dir, filepath.Base(appPath))
 	if targetPath != "" {
 		clean := filepath.Clean(targetPath)
-		allowed := []string{
-			filepath.Join(home, "Applications"),
-			"/Applications",
-		}
-		valid := false
-		for _, root := range allowed {
-			if strings.HasPrefix(clean, root+string(os.PathSeparator)) {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			return "", fmt.Errorf("目标路径不在允许的安装目录内：%s", targetPath)
+		if !allowedInstallDir(filepath.Dir(clean)) {
+			return "", fmt.Errorf("安装路径不在允许的安装目录内：%s", targetPath)
 		}
 		target = clean
 	}
@@ -157,7 +205,7 @@ func copyToApplications(appPath, targetPath string) (string, error) {
 		return "", err
 	}
 	if output, err := exec.Command("ditto", appPath, target).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("复制应用到 ~/Applications 失败：%v %s", err, strings.TrimSpace(string(output)))
+		return "", fmt.Errorf("复制应用到 %s 失败：%v %s", filepath.Dir(target), err, strings.TrimSpace(string(output)))
 	}
 
 	// 代码签名完整性校验（ad-hoc 签名也会通过；未签名或签名损坏会被拒绝）
@@ -253,21 +301,19 @@ exit 0
 }
 
 func removeLocal(path string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	roots := []string{
-		filepath.Join(home, "Applications"),
-		"/Applications",
-	}
 	clean := filepath.Clean(path)
-	for _, root := range roots {
-		if strings.HasPrefix(clean, root+string(os.PathSeparator)) {
-			return os.RemoveAll(clean)
-		}
+	if filepath.Ext(clean) != ".app" {
+		return fmt.Errorf("拒绝删除非 .app 路径：%s", path)
 	}
-	return fmt.Errorf("拒绝删除 ~/Applications 与 /Applications 之外的路径")
+	// 自定义安装目录会随设置变化，因此不再列举固定根目录，
+	// 而是校验父目录在允许范围内，并确认目标确实是完整的应用包。
+	if !allowedInstallDir(filepath.Dir(clean)) {
+		return fmt.Errorf("拒绝删除用户主目录与 /Applications 之外的路径")
+	}
+	if _, err := os.Stat(filepath.Join(clean, "Contents", "Info.plist")); err != nil {
+		return fmt.Errorf("目标不是有效的应用包：%s", path)
+	}
+	return os.RemoveAll(clean)
 }
 
 func launchLocal(path string) error {

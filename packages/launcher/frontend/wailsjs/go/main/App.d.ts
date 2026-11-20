@@ -9,6 +9,8 @@ export function GetCatalog():Promise<main.CatalogView>;
 
 export function GetDefaultBaseURL():Promise<string>;
 
+export function GetDefaultInstallDir():Promise<string>;
+
 export function GetSettings():Promise<main.Settings>;
 
 export function Install(arg1:string,arg2:number):Promise<store.Installed>;
@@ -21,6 +23,8 @@ export function Quit():Promise<void>;
 
 export function Reveal(arg1:string):Promise<void>;
 
-export function SaveSettings(arg1:string):Promise<main.Settings>;
+export function SaveSettings(arg1:string,arg2:string):Promise<main.Settings>;
+
+export function SelectInstallDir():Promise<string>;
 
 export function Uninstall(arg1:string,arg2:boolean):Promise<void>;

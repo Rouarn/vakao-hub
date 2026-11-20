@@ -27,7 +27,7 @@ func TestSettingsConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < 30; i++ {
 				url := fmt.Sprintf("https://example.com/%d/%d", worker, i)
-				if _, err := app.SaveSettings(url); err != nil {
+				if _, err := app.SaveSettings(url, ""); err != nil {
 					t.Errorf("SaveSettings: %v", err)
 					return
 				}

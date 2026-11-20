@@ -41,6 +41,7 @@ func CurrentBundle() (string, string, bool) {
 }
 
 // FindApps 在缓存的 .app 索引中按应用名查找。
+// 排序即优先级：配置的安装目录 > ~/Applications > /Applications > 其它位置。
 func FindApps(name string) []Detected {
 	target := normalizeName(name)
 	found := make([]Detected, 0, 2)
@@ -58,8 +59,29 @@ func FindApps(name string) []Detected {
 		}
 	}
 
-	sort.Slice(found, func(i, j int) bool { return found[i].Path < found[j].Path })
+	sort.Slice(found, func(i, j int) bool {
+		left, right := pathRank(found[i].Path), pathRank(found[j].Path)
+		if left != right {
+			return left < right
+		}
+		return found[i].Path < found[j].Path
+	})
 	return found
+}
+
+// pathRank 给扫描结果排优先级；数值越小越优先。
+func pathRank(path string) int {
+	if scanInstallDir != "" && strings.HasPrefix(path, scanInstallDir+string(os.PathSeparator)) {
+		return 0
+	}
+	home, err := os.UserHomeDir()
+	if err == nil && strings.HasPrefix(path, filepath.Join(home, "Applications")+string(os.PathSeparator)) {
+		return 1
+	}
+	if strings.HasPrefix(path, "/Applications"+string(os.PathSeparator)) {
+		return 2
+	}
+	return 3
 }
 
 // InvalidateIndex 在安装/卸载后调用，下一次 FindApps 重新扫描。
@@ -68,7 +90,10 @@ func InvalidateIndex() {
 }
 
 func scanInstalledApps() []installedApp {
-	roots := make([]string, 0, 2)
+	roots := make([]string, 0, 3)
+	if scanInstallDir != "" {
+		roots = append(roots, scanInstallDir)
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		roots = append(roots, filepath.Join(home, "Applications"))
 	}

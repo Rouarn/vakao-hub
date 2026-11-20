@@ -42,6 +42,8 @@ func NewApp() *App {
 	}
 
 	settings := loadSettings()
+	// 扫描已安装应用时要一并检查用户配置的安装目录。
+	install.SetInstallDir(settings.InstallDir)
 	if settings.DeviceID == "" {
 		settings.DeviceID = newDeviceID()
 		// 写盘失败只会导致下次启动重新生成标识，不影响启动与上报。
@@ -140,7 +142,7 @@ func (a *App) baseURL() string {
 	return a.settings.BaseURL
 }
 
-func (a *App) SaveSettings(baseURL string) (Settings, error) {
+func (a *App) SaveSettings(baseURL, installDir string) (Settings, error) {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -151,13 +153,58 @@ func (a *App) SaveSettings(baseURL string) (Settings, error) {
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		return a.settings, fmt.Errorf("服务地址必须以 http:// 或 https:// 开头")
 	}
+	installDir = strings.TrimSpace(installDir)
+	if err := install.ValidateInstallDir(installDir); err != nil {
+		return a.settings, err
+	}
 	next := a.settings
 	next.BaseURL = baseURL
+	next.InstallDir = installDir
 	if err := saveSettings(next); err != nil {
 		return a.settings, err
 	}
 	a.settings = next
+	// 目录变化后已安装扫描范围也要跟着变，否则新装的应用刷新后不可见。
+	install.SetInstallDir(installDir)
 	return a.settings, nil
+}
+
+// GetDefaultInstallDir 返回平台默认安装目录，供前端「恢复默认」展示。
+func (a *App) GetDefaultInstallDir() string {
+	return install.DefaultInstallDir()
+}
+
+// SelectInstallDir 打开系统目录选择器；用户取消时返回空串。
+// 选中即校验（存在、可写、在允许范围内），避免保存后才发现装不上。
+func (a *App) SelectInstallDir() (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("当前环境不支持目录选择")
+	}
+	defaultDir := install.ExpandDir(a.installDir())
+	if defaultDir == "" {
+		defaultDir = install.DefaultInstallDir()
+	}
+	dir, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:            "选择应用安装目录",
+		DefaultDirectory: defaultDir,
+	})
+	if err != nil {
+		return "", err
+	}
+	if dir == "" {
+		return "", nil
+	}
+	if err := install.ValidateInstallDir(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// installDir 返回当前配置的安装目录（可能为空，表示使用平台默认）。
+func (a *App) installDir() string {
+	a.settingsMu.RLock()
+	defer a.settingsMu.RUnlock()
+	return a.settings.InstallDir
 }
 
 func (a *App) GetCatalog() (CatalogView, error) {
@@ -409,7 +456,9 @@ func (a *App) Install(appKey string, artifactID int) (store.Installed, error) {
 	}
 
 	a.emit(appKey, "installing", 100, "正在安装")
-	installPath, err := install.Install(artifact.Format, filePath, app.AppKey, app.Name, existingPath)
+	installPath, err := install.Install(
+		artifact.Format, filePath, app.AppKey, app.Name, existingPath, a.installDir(),
+	)
 	if err != nil {
 		a.onceEvent(eventKey+":install_fail", withType(event, eventInstallFail))
 		a.emit(appKey, "error", -1, err.Error())

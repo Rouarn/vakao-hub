@@ -3,8 +3,10 @@ package install
 import "errors"
 
 // Install 按产物格式执行平台安装，返回可启动路径（可能为空）。
-func Install(format, filePath, appKey, appName, targetPath string) (string, error) {
-	return installLocal(format, filePath, appKey, appName, targetPath)
+// installDir 是用户配置的安装目录，空串表示使用平台默认目录；
+// targetPath 非空表示升级已有安装，保持原位置。
+func Install(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
+	return installLocal(format, filePath, appKey, appName, targetPath, installDir)
 }
 
 // Remove 删除已安装应用（仅允许平台约定的安装目录）。

@@ -14,7 +14,7 @@ import (
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(format, filePath, appKey, appName, targetPath string) (string, error) {
+func installLocal(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
 	case contract.FormatZIP:
 		return installZip(filePath, appKey)
@@ -131,3 +131,23 @@ func launchLocal(path string) error {
 func SelfUpdate(format, filePath string) error {
 	return fmt.Errorf("Windows 版启动器暂不支持自动更新，请退出后手动下载安装")
 }
+
+// DefaultInstallDir 返回 MSI/EXE 之外的 zip 应用落点，与 installZip 保持一致。
+func DefaultInstallDir() string {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, "VaKaoHub", "apps")
+}
+
+// ValidateInstallDir Windows 的安装位置由安装包决定，不接受自定义目录。
+func ValidateInstallDir(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	return fmt.Errorf("Windows 的安装位置由安装包决定，无法自定义")
+}
+
+// SetInstallDir Windows 不参与目录扫描（MSI 走卸载注册表），保持空实现。
+func SetInstallDir(dir string) {}

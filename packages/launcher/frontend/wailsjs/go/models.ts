@@ -146,6 +146,7 @@ export namespace main {
 	export class Settings {
 	    baseUrl: string;
 	    deviceId?: string;
+	    installDir?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -155,6 +156,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.baseUrl = source["baseUrl"];
 	        this.deviceId = source["deviceId"];
+	        this.installDir = source["installDir"];
 	    }
 	}
 

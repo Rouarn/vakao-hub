@@ -14,16 +14,12 @@ import (
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(format, filePath, appKey, appName, targetPath string) (string, error) {
+func installLocal(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
 	case contract.FormatZIP:
 		return installZip(filePath, appKey)
 	case contract.FormatAppImage:
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		target := filepath.Join(home, "Applications", filepath.Base(filePath))
+		target := filepath.Join(installRoot(installDir), filepath.Base(filePath))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return "", err
 		}
@@ -107,22 +103,62 @@ func copyFile(source, destination string) error {
 	return err
 }
 
+// DefaultInstallDir 返回默认安装目录：~/Applications。
+func DefaultInstallDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Applications")
+}
+
+// installRoot 返回实际使用的安装根目录，空值回落到默认目录。
+func installRoot(dir string) string {
+	if expanded := ExpandDir(dir); expanded != "" {
+		return expanded
+	}
+	return DefaultInstallDir()
+}
+
+// ValidateInstallDir 校验目录存在、可写且位于用户主目录内。
+func ValidateInstallDir(dir string) error {
+	dir = ExpandDir(dir)
+	if dir == "" {
+		return nil
+	}
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("安装目录必须是绝对路径")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || !strings.HasPrefix(dir, home+string(os.PathSeparator)) {
+		return fmt.Errorf("只能选择用户主目录内的目录")
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("安装目录不存在：%s", dir)
+	}
+	probe, err := os.CreateTemp(dir, ".vakaohub-write-*")
+	if err != nil {
+		return fmt.Errorf("安装目录不可写：%s", dir)
+	}
+	probe.Close()
+	_ = os.Remove(probe.Name())
+	return nil
+}
+
+// SetInstallDir Linux 的扫描只覆盖 ~/Applications，配置目录仅用于安装落点。
+func SetInstallDir(dir string) {}
+
 func removeLocal(path string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	allowed := []string{
-		filepath.Join(home, ".local", "share", "vakaohub"),
-		filepath.Join(home, "Applications"),
-	}
 	clean := filepath.Clean(path)
-	for _, root := range allowed {
-		if strings.HasPrefix(clean, root+string(os.PathSeparator)) {
-			return os.RemoveAll(clean)
-		}
+	if clean == home || !strings.HasPrefix(clean, home+string(os.PathSeparator)) {
+		return fmt.Errorf("拒绝删除用户主目录之外的路径")
 	}
-	return fmt.Errorf("拒绝删除约定安装目录之外的路径")
+	return os.RemoveAll(clean)
 }
 
 func launchLocal(path string) error {
