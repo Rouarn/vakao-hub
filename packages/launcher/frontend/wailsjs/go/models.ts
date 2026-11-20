@@ -145,6 +145,7 @@ export namespace main {
 	}
 	export class Settings {
 	    baseUrl: string;
+	    deviceId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -153,6 +154,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.baseUrl = source["baseUrl"];
+	        this.deviceId = source["deviceId"];
 	    }
 	}
 
