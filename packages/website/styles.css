@@ -432,7 +432,7 @@ select {
   letter-spacing: -0.03em;
 }
 
-.stat > span:last-child {
+.stat>span:last-child {
   font-size: 12px;
   color: var(--faint);
 }
@@ -511,7 +511,8 @@ select {
 .arch,
 .search {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 5px;
 }
 
@@ -731,7 +732,7 @@ select {
   border-right: 1px solid var(--line);
 }
 
-.why-card + .why-card {
+.why-card+.why-card {
   padding-left: 26px;
 }
 
@@ -779,7 +780,7 @@ select {
   letter-spacing: -0.035em;
 }
 
-.inside-copy > p {
+.inside-copy>p {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.8;
@@ -908,7 +909,7 @@ select {
   }
 
   .why-card,
-  .why-card + .why-card {
+  .why-card+.why-card {
     padding: 22px 0;
     border-right: none;
     border-bottom: 1px solid var(--line);
