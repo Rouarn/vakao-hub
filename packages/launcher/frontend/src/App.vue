@@ -371,8 +371,13 @@ async function primaryAction(app: AppView): Promise<void> {
     error.value = `该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`;
     return;
   }
-  // 启动器自身始终在运行，但可以走自更新流程。
-  if (app.running && app.appKey !== SELF_APP_KEY) return;
+  // 已在运行的应用不再执行打开；启动器自身只在「有更新」时走自更新替换。
+  if (app.running) {
+    if (app.appKey === SELF_APP_KEY && app.hasUpdate) {
+      await install(app);
+    }
+    return;
+  }
   if (!app.installed || app.hasUpdate) {
     await install(app);
   } else {

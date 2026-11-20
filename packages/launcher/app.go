@@ -276,6 +276,18 @@ func (a *App) catalogLocked() (CatalogView, error) {
 				item.InstallPath = path
 				installedPath = path
 				installedVersion = version
+				// 用户可能把 bundle 拖到别的目录，安装记录要跟着实际位置走，
+				// 否则后续任何按记录路径的操作都会指向已经不存在的旧位置。
+				if record, exists := a.store.Get(app.AppKey); !exists ||
+					record.InstallPath != path || record.VersionName != version {
+					_ = a.store.Put(store.Installed{
+						AppKey:      app.AppKey,
+						Name:        app.Name,
+						VersionName: version,
+						InstallPath: path,
+						InstalledAt: time.Now().Unix(),
+					})
+				}
 			}
 		}
 
@@ -535,9 +547,28 @@ func (a *App) Launch(appKey string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// 启动器自身就是当前进程，再执行 open 只会打开安装记录里的旧路径（用户可能已挪动 bundle），
+	// 这里直接视为已启动，避免误报“文件不存在”。
+	if appKey == "vakaohub" {
+		return nil
+	}
+
 	item, ok := a.store.Get(appKey)
 	if !ok {
 		return fmt.Errorf("尚未安装该应用")
+	}
+	if _, err := os.Stat(item.InstallPath); err != nil {
+		// 记录路径失效时先重新扫描并修正记录，避免用户挪动应用后永远打不开。
+		if found := install.FindApps(item.Name); len(found) > 0 {
+			item.InstallPath = found[0].Path
+			item.VersionName = found[0].Version
+			item.VersionCode = 0
+			_ = a.store.Put(item)
+			install.InvalidateIndex()
+		} else {
+			_ = a.store.Remove(appKey)
+			return fmt.Errorf("%s 已不在原安装位置，可能已被移动或删除；请在软件中心重新安装", item.Name)
+		}
 	}
 	if err := install.Launch(item.InstallPath); err != nil {
 		return err

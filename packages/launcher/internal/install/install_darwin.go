@@ -317,9 +317,15 @@ func removeLocal(path string) error {
 }
 
 func launchLocal(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path)
+	}
 	output, err := exec.Command("open", path).CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(output))
+		if strings.Contains(message, "does not exist") || strings.Contains(message, "No such file") {
+			return fmt.Errorf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path)
+		}
 		if strings.Contains(message, "not allowed") || strings.Contains(message, "cannot be opened") {
 			return fmt.Errorf("系统阻止了启动（Gatekeeper）：请在 Finder 中右键点击应用选择「打开」，或到 系统设置 → 隐私与安全性 选择「仍要打开」")
 		}

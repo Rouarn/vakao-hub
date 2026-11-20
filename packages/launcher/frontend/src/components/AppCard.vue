@@ -63,7 +63,7 @@
     <div class="card-bottom">
       <button
         class="action"
-        :disabled="busy || updatingAll || !supportsOs || (app.running && !isSelf(app))"
+        :disabled="busy || updatingAll || !supportsOs || (app.running && (!isSelf(app) || !app.hasUpdate))"
         @click.stop="$emit('primary-action', app)"
       >
         <template v-if="app.hasUpdate">更新至 {{ app.latestVersion }}</template>

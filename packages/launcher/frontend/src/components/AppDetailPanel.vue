@@ -35,7 +35,7 @@
             </div>
 
             <div class="detail-actions">
-              <button class="action" :disabled="busy || !supportsOs || (selected.running && !isSelf(selected))" @click="$emit('primary-action', selected)">
+              <button class="action" :disabled="busy || !supportsOs || (selected.running && (!isSelf(selected) || !selected.hasUpdate))" @click="$emit('primary-action', selected)">
                 <template v-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
                 <template v-else-if="selected.running">当前运行</template>
                 <template v-else-if="!selected.installed">安装</template>
