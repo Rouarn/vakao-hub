@@ -406,7 +406,7 @@ if [ "$BOTH" = 1 ]; then
   if [ "$PUBLISH" = "none" ]; then
     echo "两端产物已上传，按 --publish none 未发布"
   else
-    echo "[6/6] 统一发布（$PUBLISH）"
+    echo "[6/6] 统一发布（${PUBLISH}）"
     "${PUBLISH_CMD[@]}"
     echo "发布后复核"
     "${VERIFY_CMD[@]}"
