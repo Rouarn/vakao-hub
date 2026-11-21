@@ -10,7 +10,7 @@ info:
   description: "VaKao Hub Launcher"
   copyright: "Copyright 2026 Rouarn"
   comments: "VaKao Hub Launcher"
-  version: "1.0.3"
+  version: "1.1.0"
 
 dev_mode:
   root_path: .

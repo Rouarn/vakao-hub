@@ -1,17 +1,21 @@
 name: launcher-windows
 
+# 只允许手动触发：私有仓库 Actions 额度已用完，自动触发会持续失败。
 on:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: packages/launcher
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26.x'
           cache-dependency-path: packages/launcher/go.sum
 
       - uses: pnpm/action-setup@v4
@@ -24,24 +28,31 @@ jobs:
           cache: pnpm
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Install frontend dependencies
+        working-directory: ${{ github.workspace }}
         run: pnpm install --frozen-lockfile
 
-      - name: Read launcher version
-        id: meta
-        working-directory: packages/launcher
-        shell: bash
-        run: echo "version=$(node -p "require('./wails.json').info.productVersion")" >> "$GITHUB_OUTPUT"
+      # 版本唯一来源是 build/config.yml；先同步 build 资产，再注入 APP_VERSION。
+      - name: Sync build assets
+        run: wails3 task common:update:build-assets
 
-      - name: Build Windows launcher
-        working-directory: packages/launcher
-        run: wails build -clean -platform windows/amd64 -ldflags "-X vakaohub/launcher/internal/version.Version=${{ steps.meta.outputs.version }}"
+      - name: Package
+        run: |
+          $version = node ../../scripts/version.mjs
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          wails3 task windows:build APP_VERSION=$version
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Release gate
+        run: |
+          node ../../scripts/check-workflows.mjs
+          $actual = & .\bin\VaKaoHub.exe --version
+          if ($actual -ne $env:VERSION) { throw "--version=$actual，期望 $env:VERSION" }
+          $info = Get-Content build/windows/info.json -Raw | ConvertFrom-Json
+          if ($info.info.'0409'.ProductVersion -ne $env:VERSION) { throw "info.json=$($info.info.'0409'.ProductVersion)，期望 $env:VERSION" }
+
+      - uses: actions/upload-artifact@v4
         with:
           name: VaKaoHub-windows-amd64
-          path: packages/launcher/build/bin/*.exe
-          if-no-files-found: error
+          path: packages/launcher/bin/VaKaoHub.exe

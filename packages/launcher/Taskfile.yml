@@ -2,7 +2,10 @@ version: '3'
 
 vars:
   APP_NAME: 'VaKaoHub'
-  APP_VERSION: '{{.APP_VERSION | default "1.0.3"}}'
+  # 版本唯一来源：build/config.yml 的 info.version（scripts/version.mjs 读取）。
+  # 发布流程可显式传 APP_VERSION 覆盖；不传时与 Info.plist / info.json 保持一致。
+  APP_VERSION:
+    sh: node ../../scripts/version.mjs
   BIN_DIR: 'bin'
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "pnpm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'

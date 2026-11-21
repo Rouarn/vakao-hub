@@ -1,12 +1,12 @@
 {
 	"fixed": {
-		"file_version": "1.0.3",
-		"product_version": "1.0.3"
+		"file_version": "1.1.0",
+		"product_version": "1.1.0"
 	},
 	"info": {
 		"0409": {
-			"FileVersion": "1.0.3",
-			"ProductVersion": "1.0.3",
+			"FileVersion": "1.1.0",
+			"ProductVersion": "1.1.0",
 			"CompanyName": "Rouarn",
 			"FileDescription": "VaKao Hub Launcher",
 			"LegalCopyright": "Copyright 2026 Rouarn",

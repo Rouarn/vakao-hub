@@ -1,17 +1,21 @@
 name: launcher-macos
 
+# 只允许手动触发：私有仓库 Actions 额度已用完，自动触发会持续失败。
 on:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-14
+    defaults:
+      run:
+        working-directory: packages/launcher
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26.x'
           cache-dependency-path: packages/launcher/go.sum
 
       - uses: pnpm/action-setup@v4
@@ -24,28 +28,47 @@ jobs:
           cache: pnpm
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Install frontend dependencies
+        working-directory: ${{ github.workspace }}
         run: pnpm install --frozen-lockfile
 
-      - name: Read launcher version
-        id: meta
-        working-directory: packages/launcher
-        shell: bash
-        run: echo "version=$(node -p "require('./wails.json').info.productVersion")" >> "$GITHUB_OUTPUT"
+      # 版本唯一来源是 build/config.yml；先同步 build 资产，再注入 APP_VERSION。
+      - name: Sync build assets
+        run: wails3 task common:update:build-assets
 
-      - name: Build macOS launcher
-        working-directory: packages/launcher
-        run: wails build -clean -ldflags "-X vakaohub/launcher/internal/version.Version=${{ steps.meta.outputs.version }}"
+      - name: Package
+        run: |
+          VERSION=$(node ../../scripts/version.mjs)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          wails3 task darwin:package APP_VERSION="$VERSION"
 
-      - name: Package app
-        working-directory: packages/launcher
-        run: ditto -c -k --keepParent build/bin/VaKaoHub.app VaKaoHub-macos-arm64.zip
+      - name: Release gate
+        run: |
+          node ../../scripts/check-workflows.mjs
+          actual=$(bin/VaKaoHub.app/Contents/MacOS/VaKaoHub --version)
+          [ "$actual" = "$VERSION" ] || { echo "--version=$actual，期望 $VERSION" >&2; exit 1; }
+          plist=$(plutil -extract CFBundleShortVersionString raw -o - bin/VaKaoHub.app/Contents/Info.plist)
+          [ "$plist" = "$VERSION" ] || { echo "Info.plist=$plist，期望 $VERSION" >&2; exit 1; }
+          codesign --verify --deep --strict bin/VaKaoHub.app
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Archive
+        run: |
+          COPYFILE_DISABLE=1 ditto --norsrc --noextattr -c -k --keepParent bin/VaKaoHub.app VaKaoHub-macos-arm64.zip
+          python3 - <<'PY'
+          import zipfile
+
+          bad = [
+              name
+              for name in zipfile.ZipFile("VaKaoHub-macos-arm64.zip").namelist()
+              if name.rsplit("/", 1)[-1].startswith("._") or name.rsplit("/", 1)[-1] == ".DS_Store"
+          ]
+          if bad:
+              raise SystemExit("归档包含 AppleDouble/DS_Store: " + ", ".join(bad))
+          PY
+
+      - uses: actions/upload-artifact@v4
         with:
           name: VaKaoHub-macos-arm64
           path: packages/launcher/VaKaoHub-macos-arm64.zip
-          if-no-files-found: error

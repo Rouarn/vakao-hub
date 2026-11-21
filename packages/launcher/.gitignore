@@ -2,6 +2,10 @@ bin/
 !internal/selfupdate/bin/
 internal/selfupdate/bin/*
 !internal/selfupdate/bin/.gitkeep
+# update:build-assets 生成、但本项目不发布的平台资产
+build/ios/
+build/linux/
+build/windows/nsis/
 node_modules
 frontend/dist
 frontend/bindings/

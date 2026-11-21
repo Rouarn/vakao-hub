@@ -14,23 +14,32 @@ VaKao 软件中心的桌面客户端：读取分发服务的应用目录，下�
 
 ## 技术栈
 
-- Wails v2.17 + Go 1.27
-- Vue 3 + Vite 7 + TypeScript
+- Wails v3.1 + Go 1.26
+- Vue 3.5 + Vite 8 + TypeScript 6
 - 无第三方 UI 库，界面样式集中在 `frontend/src/style.css`
 
 ## 开发与构建
 
 ```bash
 # 开发（热更新，Wails 内置 Vite）
-wails dev
+wails3 task dev
 
-# 生产构建（版本号写入 wails.json 的 info.productVersion，构建时注入 Go 代码；
-# 运行时前端通过 GetAppVersion 读取，不要在前端硬编码）
-wails build -ldflags "-X vakaohub/launcher/internal/version.Version=$(node -p "require('./wails.json').info.productVersion")"
+# 生产构建：版本唯一来源是 build/config.yml 的 info.version，
+# Taskfile 通过 ../../scripts/version.mjs 读取并注入 Go 代码，
+# 构建前如需同步 Info.plist / info.json，先执行：
+wails3 task common:update:build-assets
+
+VERSION=$(node ../../scripts/version.mjs)
+wails3 task darwin:package APP_VERSION="$VERSION"
 
 # 产物
-build/bin/VaKaoHub.app
+bin/VaKaoHub.app
+
+# 发布（含版本一致、签名、归档门禁；--dry-run 只检查不上传）
+./ship.sh --dry-run
 ```
+
+`build/darwin/Info.plist`、`build/windows/info.json` 等属于生成物，不要手改；改版本只改 `build/config.yml`，再运行 `common:update:build-assets`。
 
 默认连接生产服务 `https://dist.woyuxiaji.cn/api/v1`；本地开发在应用「设置」中改为 `http://127.0.0.1:3000/api/v1`。
 
@@ -62,11 +71,11 @@ macOS 使用内置 `hdiutil`/`ditto`，不修改系统安全设置；未公证�
 
 ## Windows 构建
 
-Windows 需要 Windows 机器或 CI。仓库提供 [`.github/workflows/launcher-windows.yml`](../../.github/workflows/launcher-windows.yml)，在 GitHub Actions 的 `windows-latest` 上安装 Wails、编译并上传 `VaKaoHub.exe`。
+Windows 需要 Windows 机器或 CI。仓库提供 [`.github/workflows/launcher-windows.yml`](../../.github/workflows/launcher-windows.yml)，在 GitHub Actions 的 `windows-latest` 上安装 wails3、编译并上传 `VaKaoHub.exe`。所有 workflow 只允许 `workflow_dispatch` 手动触发，不使用 `push` / `pull_request` / `schedule`。
 
 ## 托盘
 
-暂未实现系统托盘：Wails v2 与常见 Go 托盘库都要求占用主线程，两者同时启动会冲突；后续换 Wails v3 或原生 `NSStatusItem` 再补。
+暂未实现系统托盘：Wails v3 与常见 Go 托盘库都要求占用主线程，两者同时启动会冲突；后续用原生 `NSStatusItem` 再补。
 
 ## 冒烟测试
 
