@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +43,14 @@ func installLocal(ctx context.Context, format, filePath, appKey, appName, target
 		if err := ctx.Err(); err != nil {
 			return "", apperr.FromContext(err, "install.exe")
 		}
+		// 单文件便携应用没有安装器可调起，复制进托管目录并记录安装结果；
+		// 安装器（NSIS/Inno 等）仍按原来的方式交给系统向导。
+		if !isInstallerEXE(filePath) {
+			return installPortableEXE(ctx, filePath, appKey)
+		}
 		command := exec.Command("cmd", "/c", "start", "", filePath)
+		// 安装器/便携程序通常按自身目录查找资源，不能继承启动器的工作目录。
+		command.Dir = filepath.Dir(filePath)
 		// exe 启动后由系统安装程序接管，不能再取消。
 		if err := command.Start(); err != nil {
 			return "", apperr.New(apperr.KindInternal, "install.exe", "启动安装程序失败，请手动安装", err)
@@ -138,11 +146,106 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 	return filepath.Join(target, relative), nil
 }
 
+// installerMarkers 常见 Windows 安装器写在文件里的签名。
+// NSIS（electron-builder / Tauri 的默认安装器）含 NullsoftInst。
+var installerMarkers = [][]byte{
+	[]byte("NullsoftInst"),
+	[]byte("Inno Setup"),
+	[]byte("WixBundle"),
+	[]byte("InstallShield"),
+	[]byte("Squirrel"),
+}
+
+// isInstallerEXE 判断 exe 是安装向导还是单文件便携应用。
+// 读不到文件时按安装器处理，让后续 Start 返回可诊断的错误而不是误复制。
+func isInstallerEXE(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return true
+	}
+	defer file.Close()
+
+	const window = 4 << 20
+	buffer := make([]byte, window)
+	n, err := io.ReadFull(file, buffer)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return true
+	}
+	buffer = buffer[:n]
+	for _, marker := range installerMarkers {
+		if bytes.Contains(buffer, marker) {
+			return true
+		}
+	}
+	// 部分安装器把签名放在文件尾部 overlay，补查一次尾部。
+	if info, statErr := file.Stat(); statErr == nil && info.Size() > window {
+		tail := make([]byte, window)
+		if _, readErr := file.ReadAt(tail, info.Size()-int64(window)); readErr == nil {
+			for _, marker := range installerMarkers {
+				if bytes.Contains(tail, marker) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// installPortableEXE 把没有安装器的单文件应用复制进托管目录，
+// 返回可直接记录的启动路径；暂存与换入复用 zip 安装的原子流程。
+func installPortableEXE(ctx context.Context, filePath, appKey string) (string, error) {
+	root := DefaultInstallDir()
+	if strings.TrimSpace(root) == "" {
+		return "", apperr.New(apperr.KindInternal, "install.portable", "无法确定应用安装目录，请检查用户配置目录", nil)
+	}
+	target := filepath.Join(root, appKey)
+	stage, err := atomicfs.StageDirFor(target)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+
+	name := filepath.Base(filePath)
+	source, err := os.Open(filePath)
+	if err != nil {
+		return "", apperr.FromOS(err, "install.portable")
+	}
+	defer source.Close()
+
+	destination, err := os.OpenFile(filepath.Join(stage, name), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return "", apperr.FromOS(err, "install.portable")
+	}
+	if err := copyWithContext(ctx, destination, source); err != nil {
+		_ = destination.Close()
+		return "", apperr.FromContext(err, "install.portable")
+	}
+	if err := destination.Close(); err != nil {
+		return "", apperr.FromOS(err, "install.portable")
+	}
+	if err := commitStage(stage, target); err != nil {
+		return "", err
+	}
+	return filepath.Join(target, name), nil
+}
+
+// findExecutable 选择层级最浅的 exe：WireDeck 这类包顶层是主程序，
+// 子目录里还带着 adb/scrcpy 等工具，不能按字典序误选子目录里的程序。
 func findExecutable(root string) string {
-	var found string
+	found := ""
+	foundDepth := -1
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err == nil && !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".exe") && found == "" {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".exe") {
+			return nil
+		}
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return nil
+		}
+		depth := strings.Count(relative, string(os.PathSeparator))
+		if found == "" || depth < foundDepth {
 			found = path
+			foundDepth = depth
 		}
 		return nil
 	})
@@ -176,7 +279,10 @@ func removeLocal(path string) error {
 }
 
 func launchLocal(path string) error {
-	output, err := exec.Command("cmd", "/c", "start", "", path).CombinedOutput()
+	command := exec.Command("cmd", "/c", "start", "", path)
+	// 便携应用的资源相对自身目录解析；启动器的工作目录可能是 System32。
+	command.Dir = filepath.Dir(path)
+	output, err := command.CombinedOutput()
 	if err != nil {
 		return apperr.New(
 			apperr.KindInternal,

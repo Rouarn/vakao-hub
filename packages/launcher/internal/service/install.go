@@ -118,6 +118,13 @@ func (s *InstallService) install(ctx context.Context, appKey string, artifactID 
 		return store.Installed{}, err
 	}
 
+	// 安装前预检包结构：形态不符合约定时直接给出具体原因，不再走到解压/调起安装器才失败。
+	if err := install.ValidatePackage(platform, artifact.Format, filePath); err != nil {
+		s.host.onceEvent(eventKey+":verify_fail", withType(event, eventVerifyFail))
+		s.fail(appKey, opID, err)
+		return store.Installed{}, err
+	}
+
 	// 启动器更新自身：运行中的 bundle 不能就地覆盖，交给后台脚本在本进程退出后替换。
 	if appKey == selfAppKey {
 		s.host.emit(appKey, opID, "installing", 100, "正在准备替换启动器", false)
