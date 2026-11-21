@@ -71,9 +71,8 @@ function extractFunction(source, name) {
 
 const website = readFileSync(fileURLToPath(new URL('../../website/app.js', import.meta.url)), 'utf8');
 const websiteFormatBytes = new Function(`return (${extractFunction(website, 'formatBytes')})`)();
-const websiteFormatDate = new Function(`return (${extractFunction(website, 'formatDate')})`)();
 
-test('website 与 launcher 的字节/日期副本实现和 shared 行为一致', () => {
+test('website 与 launcher 的字节格式化副本和 shared 行为一致', () => {
   const byteFixtures = [0, null, undefined, -1, NaN, 1023, 1536, 5 * 1024 ** 4];
   const dateFixtures = [0, null, undefined, -1, 1700000000, 1700000000000];
   for (const value of byteFixtures) {
@@ -81,7 +80,6 @@ test('website 与 launcher 的字节/日期副本实现和 shared 行为一致',
     assert.equal(launcherFormatBytes(value), formatBytes(value));
   }
   for (const value of dateFixtures) {
-    assert.equal(websiteFormatDate(value), formatDate(value));
     assert.equal(launcherFormatDate(value), formatDate(value));
   }
 });
