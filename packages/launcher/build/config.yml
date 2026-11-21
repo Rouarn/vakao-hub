@@ -1,6 +1,6 @@
-# This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
-# Note that this will overwrite any changes you have made to the assets.
+# 该文件包含该项目的配置。
+# 当您更新 `info` 或 `fileAssociations` 时，请运行命令 `wails3 task common:update:build-assets` 来更新资产。
+# 请注意，这将覆盖您对资产所做的任何更改。
 version: '3'
 
 info:
