@@ -6,12 +6,11 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const tokensPath = join(root, 'shared/design/tokens.css');
-const websitePath = join(root, 'website/styles.css');
 const launcherPath = join(root, 'launcher/frontend/src/style.css');
 const adminPath = join(root, 'admin/src');
 const designDocPath = join(root, '..', 'docs/design-system.md');
 
-/** 三端共享颜色令牌；字体栈各端允许有本地回退差异，不参与比较。 */
+/** 启动器 / 管理端共享颜色令牌；字体栈各端允许有本地回退差异，不参与比较。 */
 const SHARED_COLOR_TOKENS = [
   '--paper',
   '--raised',
@@ -47,19 +46,17 @@ function normalize(value) {
   return value.replace(/\s+/g, '').replace(/0\./g, '.').toLowerCase();
 }
 
-test('website 与 launcher 的共享颜色令牌和 tokens.css 一致', () => {
+test('launcher 前端与 tokens.css 的共享颜色令牌一致', () => {
   const source = parseRootBlock(read(tokensPath));
-  for (const filePath of [websitePath, launcherPath]) {
-    const tokens = parseRootBlock(read(filePath));
-    for (const name of SHARED_COLOR_TOKENS) {
-      assert.ok(source.has(name), `tokens.css 缺少 ${name}`);
-      assert.ok(tokens.has(name), `${filePath} 缺少 ${name}`);
-      assert.equal(
-        normalize(tokens.get(name)),
-        normalize(source.get(name)),
-        `${filePath} 的 ${name} 与 tokens.css 不一致`,
-      );
-    }
+  const tokens = parseRootBlock(read(launcherPath));
+  for (const name of SHARED_COLOR_TOKENS) {
+    assert.ok(source.has(name), `tokens.css 缺少 ${name}`);
+    assert.ok(tokens.has(name), `${launcherPath} 缺少 ${name}`);
+    assert.equal(
+      normalize(tokens.get(name)),
+      normalize(source.get(name)),
+      `${launcherPath} 的 ${name} 与 tokens.css 不一致`,
+    );
   }
 });
 
@@ -87,9 +84,10 @@ test('admin 样式只引用 CSS 变量，不再有硬编码颜色', () => {
   }
 });
 
-test('design-system.md 的令牌表与 tokens.css 一致', () => {
+test('design-system.md 的共享令牌表与 tokens.css 一致', () => {
   const source = parseRootBlock(read(tokensPath));
-  const doc = read(designDocPath);
+  // 下载站使用独立配色，单独成节，不参与共享令牌校验。
+  const doc = read(designDocPath).split('### 下载站')[0];
   for (const match of doc.matchAll(/^\| `(--[a-z-]+)` \| `([^`]+)` \|/gm)) {
     const [, name, value] = match;
     assert.ok(source.has(name), `tokens.css 缺少文档声明的 ${name}`);
