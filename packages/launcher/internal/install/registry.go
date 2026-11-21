@@ -1,64 +1,13 @@
 package install
 
-import (
-	"regexp"
-	"strings"
-)
+import "strings"
 
 // registryEntry 是 Windows 卸载注册表项里与启动路径相关的字段集合。
 type registryEntry struct {
-	Key             string
 	DisplayName     string
 	DisplayVersion  string
 	InstallLocation string
 	DisplayIcon     string
-}
-
-// registryValuePattern 匹配 reg query 的输出行，例如 `    DisplayName    REG_SZ    Foo`。
-var registryValuePattern = regexp.MustCompile(`^\s+(.+?)\s{2,}(REG_[A-Z0-9_]+)(?:\s{2,}(.*))?$`)
-
-// parseUninstallRegistry 解析 `reg query <Uninstall 根键> /s` 的输出。
-// 未缩进且以 HKEY_ 开头的行是注册表项路径，缩进行是该键下的值。
-func parseUninstallRegistry(output string) []registryEntry {
-	entries := make([]registryEntry, 0, 8)
-	current := -1
-
-	for _, raw := range strings.Split(output, "\n") {
-		line := strings.TrimRight(raw, "\r")
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if line == trimmed {
-			current = -1
-			if strings.HasPrefix(strings.ToUpper(trimmed), "HKEY_") {
-				entries = append(entries, registryEntry{Key: trimmed})
-				current = len(entries) - 1
-			}
-			continue
-		}
-		if current < 0 {
-			continue
-		}
-
-		match := registryValuePattern.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		value := strings.TrimSpace(match[3])
-		switch strings.ToLower(match[1]) {
-		case "displayname":
-			entries[current].DisplayName = value
-		case "displayversion":
-			entries[current].DisplayVersion = value
-		case "installlocation":
-			entries[current].InstallLocation = value
-		case "displayicon":
-			entries[current].DisplayIcon = value
-		}
-	}
-
-	return entries
 }
 
 // cleanExecutablePath 去掉引号与 `,0` 形式的图标索引后缀。

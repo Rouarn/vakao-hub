@@ -5,10 +5,11 @@ package install
 import (
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"golang.org/x/sys/windows/registry"
 
 	"vakaohub/launcher/internal/version"
 )
@@ -56,23 +57,61 @@ func InvalidateIndex() {
 	uninstallCache.reset()
 }
 
-var uninstallRegistryRoots = []string{
-	`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
-	`HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`,
-	`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
+// uninstallRegistryRoots 与 reg query 的三条路径一一对应：
+// 64 位 HKLM、WOW6432Node 下的 32 位 HKLM、以及当前用户 HKCU。
+var uninstallRegistryRoots = []struct {
+	hive registry.Key
+	path string
+}{
+	{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`},
+	{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`},
+	{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`},
 }
 
+// queryUninstallRegistry 直接读注册表，不经 cmd.exe。
+// 启动器是 GUI 子系统，没有控制台；早先通过 `cmd /c reg query` 读取时，
+// 每个根键都会新建一个控制台窗口（启动时闪屏），因此这里改成进程内读取。
 func queryUninstallRegistry() []registryEntry {
 	entries := make([]registryEntry, 0, 16)
 	for _, root := range uninstallRegistryRoots {
-		// 管道输出沿用控制台代码页，先切到 UTF-8，避免中文显示名乱码。
-		output, err := exec.Command("cmd", "/c", "chcp 65001 >nul && reg query "+root+" /s").CombinedOutput()
+		key, err := registry.OpenKey(root.hive, root.path, registry.READ)
 		if err != nil {
 			continue
 		}
-		entries = append(entries, parseUninstallRegistry(string(output))...)
+		names, err := key.ReadSubKeyNames(-1)
+		if err == nil {
+			for _, name := range names {
+				sub, err := registry.OpenKey(key, name, registry.READ)
+				if err != nil {
+					continue
+				}
+				entries = append(entries, readUninstallEntry(sub))
+				sub.Close()
+			}
+		}
+		key.Close()
 	}
 	return entries
+}
+
+// readUninstallEntry 取与启动路径相关的四个字符串值。
+// GetStringValue 接受 REG_SZ 与 REG_EXPAND_SZ，且和 reg query 一样保留未展开的内容，
+// 因此匹配结果与旧实现一致。
+func readUninstallEntry(key registry.Key) registryEntry {
+	return registryEntry{
+		DisplayName:     registryString(key, "DisplayName"),
+		DisplayVersion:  registryString(key, "DisplayVersion"),
+		InstallLocation: registryString(key, "InstallLocation"),
+		DisplayIcon:     registryString(key, "DisplayIcon"),
+	}
+}
+
+func registryString(key registry.Key, name string) string {
+	value, _, err := key.GetStringValue(name)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
 func fileExists(path string) bool {

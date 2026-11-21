@@ -2,54 +2,6 @@ package install
 
 import "testing"
 
-// 一份典型的 `reg query HKLM\...\Uninstall /s` 输出片段。
-const uninstallFixture = `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{1F2E3D4C-0000-4000-8000-000000000001}
-    DisplayName    REG_SZ    WireDeck
-    DisplayVersion    REG_SZ    1.4.2
-    InstallLocation    REG_SZ    C:\Program Files\WireDeck\
-    DisplayIcon    REG_SZ    "C:\Program Files\WireDeck\WireDeck.exe",0
-    UninstallString    REG_SZ    MsiExec.exe /I{1F2E3D4C-0000-4000-8000-000000000001}
-
-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{1F2E3D4C-0000-4000-8000-000000000002}
-    DisplayName    REG_SZ    绘图助手
-    DisplayVersion    REG_SZ    0.9.0
-    InstallLocation    REG_EXPAND_SZ    %LOCALAPPDATA%\DrawingHelper
-    DisplayIcon    REG_SZ    C:\Users\Public\DrawingHelper\DrawingHelper.exe
-
-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NoName
-    DisplayVersion    REG_SZ    2.0.0
-`
-
-func TestParseUninstallRegistry(t *testing.T) {
-	entries := parseUninstallRegistry(uninstallFixture)
-	if len(entries) != 3 {
-		t.Fatalf("期望解析 3 个注册表项，实际 %d", len(entries))
-	}
-
-	first := entries[0]
-	if first.DisplayName != "WireDeck" || first.DisplayVersion != "1.4.2" {
-		t.Fatalf("第一项名称/版本解析错误：%+v", first)
-	}
-	if first.InstallLocation != `C:\Program Files\WireDeck\` {
-		t.Fatalf("InstallLocation 解析错误：%q", first.InstallLocation)
-	}
-	if first.DisplayIcon != `"C:\Program Files\WireDeck\WireDeck.exe",0` {
-		t.Fatalf("DisplayIcon 解析错误：%q", first.DisplayIcon)
-	}
-
-	second := entries[1]
-	if second.DisplayName != "绘图助手" || second.DisplayVersion != "0.9.0" {
-		t.Fatalf("中文显示名解析错误：%+v", second)
-	}
-	if second.InstallLocation != `%LOCALAPPDATA%\DrawingHelper` {
-		t.Fatalf("REG_EXPAND_SZ 值解析错误：%q", second.InstallLocation)
-	}
-
-	if entries[2].DisplayName != "" || entries[2].DisplayVersion != "2.0.0" {
-		t.Fatalf("缺少 DisplayName 的项应保留版本且名称为空：%+v", entries[2])
-	}
-}
-
 func TestCleanExecutablePath(t *testing.T) {
 	cases := []struct {
 		raw  string
