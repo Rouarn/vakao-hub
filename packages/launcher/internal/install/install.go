@@ -4,7 +4,11 @@ import (
 	"context"
 
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/atomicfs"
 )
+
+// swapDirectory 是原子换入的注入点，测试可替换为失败实现验证旧版本不被破坏。
+var swapDirectory = atomicfs.Swap
 
 // Install 按产物格式执行平台安装，返回可启动路径（可能为空）。
 // installDir 是用户配置的安装目录，空串表示使用平台默认目录；

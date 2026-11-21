@@ -5,23 +5,24 @@ package install
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/atomicfs"
 	"vakaohub/launcher/internal/contract"
 )
 
 func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
-	case contract.FormatDMG:
-		return installDMG(ctx, filePath, targetPath, installDir)
-	case contract.FormatZIP:
-		return installZip(ctx, filePath, targetPath, installDir)
+	case contract.FormatDMG, contract.FormatZIP:
+		return installBundle(ctx, format, filePath, targetPath, installDir)
 	default:
 		return "", apperr.New(
 			apperr.KindUnsupported,
@@ -30,6 +31,129 @@ func installLocal(ctx context.Context, format, filePath, appKey, appName, target
 			nil,
 		)
 	}
+}
+
+// installBundle 先在 target 同级暂存目录解出并校验新 bundle，再原子换入。
+// 任何一步失败都只清理暂存目录，旧版本保持原样。
+func installBundle(ctx context.Context, format, filePath, targetPath, installDir string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", apperr.FromContext(err, "install")
+	}
+
+	dir := ExpandDir(installDir)
+	if dir == "" {
+		dir = DefaultInstallDir()
+	}
+	if dir == "" {
+		return "", apperr.New(apperr.KindInternal, "install.dir", "无法确定应用安装目录", nil)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", apperr.FromOS(err, "install.dir")
+	}
+	if !allowedInstallDir(dir) {
+		return "", apperr.New(
+			apperr.KindPermission,
+			"install.dir",
+			"只能安装到用户主目录内或 /Applications 下的目录",
+			nil,
+		)
+	}
+
+	targetParent := dir
+	target := ""
+	if targetPath != "" {
+		target = filepath.Clean(targetPath)
+		if !allowedInstallDir(filepath.Dir(target)) {
+			return "", apperr.New(
+				apperr.KindPermission,
+				"install.dir",
+				fmt.Sprintf("安装路径不在允许的安装目录内：%s", targetPath),
+				nil,
+			)
+		}
+		targetParent = filepath.Dir(target)
+	}
+	if err := os.MkdirAll(targetParent, 0o755); err != nil {
+		return "", apperr.FromOS(err, "install.dir")
+	}
+
+	stage, err := atomicfs.StageDirFor(filepath.Join(targetParent, ".vakaohub-target"))
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+
+	stagedApp, err := ExtractApp(ctx, format, filePath, stage)
+	if err != nil {
+		return "", err
+	}
+	if err := validateStagedBundle(ctx, stagedApp); err != nil {
+		return "", err
+	}
+
+	if target == "" {
+		target = filepath.Join(dir, filepath.Base(stagedApp))
+	}
+
+	rollback, err := swapDirectory(stagedApp, target)
+	if err != nil {
+		return "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = rollback()
+		}
+	}()
+
+	if _, err := os.Stat(target); err != nil {
+		return "", apperr.FromOS(err, "install.swap")
+	}
+	committed = true
+	if err := atomicfs.CleanupBackups(target); err != nil {
+		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
+	}
+	return target, nil
+}
+
+// validateStagedBundle 在换入前确认 bundle 结构完整且签名有效。
+func validateStagedBundle(ctx context.Context, appPath string) error {
+	if err := ctx.Err(); err != nil {
+		return apperr.FromContext(err, "install.verify")
+	}
+	infoPath := filepath.Join(appPath, "Contents", "Info.plist")
+	if _, err := os.Stat(infoPath); err != nil {
+		return apperr.New(apperr.KindCorrupt, "install.verify", "安装包内未找到有效的 .app 结构，请重试", err)
+	}
+
+	executable := bundleExecutable(ctx, infoPath)
+	if executable != "" {
+		executablePath := filepath.Join(appPath, "Contents", "MacOS", executable)
+		if _, err := os.Stat(executablePath); err != nil {
+			return apperr.New(apperr.KindCorrupt, "install.verify", "安装包内未找到可执行文件，请重试", err)
+		}
+	} else {
+		entries, err := os.ReadDir(filepath.Join(appPath, "Contents", "MacOS"))
+		if err != nil || len(entries) == 0 {
+			return apperr.New(apperr.KindCorrupt, "install.verify", "安装包内未找到可执行文件，请重试", err)
+		}
+	}
+
+	output, err := exec.CommandContext(ctx, "codesign", "--verify", "--deep", "--strict", appPath).CombinedOutput()
+	if err != nil {
+		return commandFailure(ctx, apperr.KindSignature, "install.signature", "", err, output)
+	}
+	return nil
+}
+
+func bundleExecutable(ctx context.Context, infoPath string) string {
+	output, err := exec.CommandContext(
+		ctx, "plutil", "-extract", "CFBundleExecutable", "raw", "-o", "-", infoPath,
+	).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 // DefaultInstallDir 返回默认安装目录：~/Applications。
@@ -101,32 +225,12 @@ func configuredInstallDir() string {
 	return scanInstallDir
 }
 
-func installZip(ctx context.Context, filePath, targetPath, installDir string) (string, error) {
-	tmp, err := os.MkdirTemp("", "vakaohub-unzip-*")
-	if err != nil {
-		return "", apperr.FromOS(err, "install.extract")
+// CleanupStale 清理 7 天前的暂存与备份残留。
+func CleanupStale() {
+	atomicfs.CleanupStale(DefaultInstallDir(), 7*24*time.Hour)
+	if dir := configuredInstallDir(); dir != "" {
+		atomicfs.CleanupStale(dir, 7*24*time.Hour)
 	}
-	defer os.RemoveAll(tmp)
-
-	appPath, err := ExtractApp(ctx, contract.FormatZIP, filePath, tmp)
-	if err != nil {
-		return "", err
-	}
-	return copyToApplications(ctx, appPath, targetPath, installDir)
-}
-
-func installDMG(ctx context.Context, filePath, targetPath, installDir string) (string, error) {
-	tmp, err := os.MkdirTemp("", "vakaohub-dmg-*")
-	if err != nil {
-		return "", apperr.FromOS(err, "install.extract")
-	}
-	defer os.RemoveAll(tmp)
-
-	appPath, err := ExtractApp(ctx, contract.FormatDMG, filePath, tmp)
-	if err != nil {
-		return "", err
-	}
-	return copyToApplications(ctx, appPath, targetPath, installDir)
 }
 
 // ExtractApp 把安装包里的 .app 解到 dest，返回解出的 .app 路径。
@@ -212,60 +316,6 @@ func findApp(root string) (string, error) {
 		return "", apperr.New(apperr.KindCorrupt, "extract.find", "安装包内未找到 .app，请重试", nil)
 	}
 	return found, nil
-}
-
-// copyToApplications 把解出的 .app 放进安装目录。
-// targetPath 非空表示升级已有安装：保持原位置不搬家，但该位置仍须在允许范围内。
-func copyToApplications(ctx context.Context, appPath, targetPath, installDir string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", apperr.FromContext(err, "install.copy")
-	}
-	ctx, cancel := context.WithTimeout(ctx, extractTimeout)
-	defer cancel()
-
-	dir := ExpandDir(installDir)
-	if dir == "" {
-		dir = DefaultInstallDir()
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", apperr.FromOS(err, "install.copy")
-	}
-
-	target := filepath.Join(dir, filepath.Base(appPath))
-	if targetPath != "" {
-		clean := filepath.Clean(targetPath)
-		if !allowedInstallDir(filepath.Dir(clean)) {
-			return "", apperr.New(
-				apperr.KindPermission,
-				"install.copy",
-				fmt.Sprintf("安装路径不在允许的安装目录内：%s", targetPath),
-				nil,
-			)
-		}
-		target = clean
-	}
-	if err := os.RemoveAll(target); err != nil {
-		return "", apperr.FromOS(err, "install.copy")
-	}
-	output, err := exec.CommandContext(ctx, "ditto", appPath, target).CombinedOutput()
-	if err != nil {
-		return "", commandFailure(
-			ctx,
-			apperr.KindInternal,
-			"install.copy",
-			fmt.Sprintf("复制应用到 %s 失败，请检查安装目录后重试", filepath.Dir(target)),
-			err,
-			output,
-		)
-	}
-
-	// 代码签名完整性校验（ad-hoc 签名也会通过；未签名或签名损坏会被拒绝）
-	output, err = exec.CommandContext(ctx, "codesign", "--verify", "--deep", "--strict", target).CombinedOutput()
-	if err != nil {
-		_ = os.RemoveAll(target)
-		return "", commandFailure(ctx, apperr.KindSignature, "install.signature", "", err, output)
-	}
-	return target, nil
 }
 
 func removeLocal(path string) error {

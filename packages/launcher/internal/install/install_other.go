@@ -6,12 +6,15 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/atomicfs"
 	"vakaohub/launcher/internal/contract"
 )
 
@@ -20,17 +23,7 @@ func installLocal(ctx context.Context, format, filePath, appKey, appName, target
 	case contract.FormatZIP:
 		return installZip(ctx, filePath, appKey)
 	case contract.FormatAppImage:
-		target := filepath.Join(installRoot(installDir), filepath.Base(filePath))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return "", apperr.FromOS(err, "install.appimage")
-		}
-		if err := copyFileContext(ctx, filePath, target); err != nil {
-			return "", err
-		}
-		if err := os.Chmod(target, 0o755); err != nil {
-			return "", apperr.FromOS(err, "install.appimage")
-		}
-		return target, nil
+		return installAppImage(ctx, filePath, installDir)
 	default:
 		return "", apperr.New(
 			apperr.KindUnsupported,
@@ -46,13 +39,17 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 	if err != nil {
 		return "", apperr.FromOS(err, "install.zip")
 	}
-	target := filepath.Join(home, ".local", "share", "vakaohub", "apps", appKey)
-	if err := os.RemoveAll(target); err != nil {
+	root := filepath.Join(home, ".local", "share", "vakaohub", "apps")
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", apperr.FromOS(err, "install.zip")
 	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return "", apperr.FromOS(err, "install.zip")
+	target := filepath.Join(root, appKey)
+
+	stage, err := atomicfs.StageDirFor(target)
+	if err != nil {
+		return "", err
 	}
+	defer os.RemoveAll(stage)
 
 	reader, err := zip.OpenReader(filePath)
 	if err != nil {
@@ -62,12 +59,10 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 
 	for _, file := range reader.File {
 		if err := ctx.Err(); err != nil {
-			_ = os.RemoveAll(target)
 			return "", apperr.FromContext(err, "install.zip")
 		}
-		name := filepath.Join(target, file.Name)
-		if !strings.HasPrefix(name, target+string(os.PathSeparator)) {
-			_ = os.RemoveAll(target)
+		name := filepath.Join(stage, file.Name)
+		if !strings.HasPrefix(name, stage+string(os.PathSeparator)) {
 			return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包包含非法路径，请重试", nil)
 		}
 		if file.FileInfo().IsDir() {
@@ -88,13 +83,74 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 			source.Close()
 			return "", apperr.FromOS(err, "install.zip")
 		}
-		if err := copyWithContext(ctx, destination, source); err != nil {
-			source.Close()
-			destination.Close()
-			return "", apperr.FromContext(err, "install.zip")
-		}
+		copyErr := copyWithContext(ctx, destination, source)
 		source.Close()
 		destination.Close()
+		if copyErr != nil {
+			return "", apperr.FromContext(copyErr, "install.zip")
+		}
+	}
+
+	rollback, err := swapDirectory(stage, target)
+	if err != nil {
+		return "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = rollback()
+		}
+	}()
+	if _, err := os.Stat(target); err != nil {
+		return "", apperr.FromOS(err, "install.swap")
+	}
+	committed = true
+	if err := atomicfs.CleanupBackups(target); err != nil {
+		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
+	}
+	return target, nil
+}
+
+func installAppImage(ctx context.Context, filePath, installDir string) (string, error) {
+	root := installRoot(installDir)
+	if root == "" {
+		return "", apperr.New(apperr.KindInternal, "install.dir", "无法确定应用安装目录", nil)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", apperr.FromOS(err, "install.appimage")
+	}
+	target := filepath.Join(root, filepath.Base(filePath))
+
+	stage, err := atomicfs.StageDirFor(target)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+
+	staged := filepath.Join(stage, filepath.Base(filePath))
+	if err := copyFileContext(ctx, filePath, staged); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(staged, 0o755); err != nil {
+		return "", apperr.FromOS(err, "install.appimage")
+	}
+
+	rollback, err := swapDirectory(staged, target)
+	if err != nil {
+		return "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = rollback()
+		}
+	}()
+	if _, err := os.Stat(target); err != nil {
+		return "", apperr.FromOS(err, "install.swap")
+	}
+	committed = true
+	if err := atomicfs.CleanupBackups(target); err != nil {
+		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
 	}
 	return target, nil
 }
@@ -161,6 +217,16 @@ func ValidateInstallDir(dir string) error {
 
 // SetInstallDir Linux 的扫描只覆盖 ~/Applications，配置目录仅用于安装落点。
 func SetInstallDir(dir string) {}
+
+// CleanupStale 清理 7 天前的暂存与备份残留。
+func CleanupStale() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	atomicfs.CleanupStale(filepath.Join(home, ".local", "share", "vakaohub", "apps"), 7*24*time.Hour)
+	atomicfs.CleanupStale(DefaultInstallDir(), 7*24*time.Hour)
+}
 
 func removeLocal(path string) error {
 	home, err := os.UserHomeDir()

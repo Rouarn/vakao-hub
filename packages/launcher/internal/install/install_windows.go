@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/atomicfs"
 	"vakaohub/launcher/internal/contract"
 )
 
@@ -107,55 +109,95 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 	if err != nil {
 		return "", apperr.FromOS(err, "install.zip")
 	}
-	target := filepath.Join(base, "VaKaoHub", "apps", appKey)
-	if err := os.RemoveAll(target); err != nil {
+	root := filepath.Join(base, "VaKaoHub", "apps")
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", apperr.FromOS(err, "install.zip")
 	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return "", apperr.FromOS(err, "install.zip")
+	target := filepath.Join(root, appKey)
+
+	stage, err := atomicfs.StageDirFor(target)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+
+	if err := extractZipTo(ctx, filePath, stage); err != nil {
+		return "", err
 	}
 
+	stageExe := findExecutable(stage)
+	if stageExe == "" {
+		return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包内未找到可执行文件（.exe），无法完成安装", nil)
+	}
+	relative, err := filepath.Rel(stage, stageExe)
+	if err != nil {
+		return "", apperr.New(apperr.KindInternal, "install.zip", "安装包路径异常，请重试", err)
+	}
+
+	rollback, err := swapDirectory(stage, target)
+	if err != nil {
+		return "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = rollback()
+		}
+	}()
+
+	if _, err := os.Stat(target); err != nil {
+		return "", apperr.FromOS(err, "install.swap")
+	}
+	committed = true
+	if err := atomicfs.CleanupBackups(target); err != nil {
+		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
+	}
+	return filepath.Join(target, relative), nil
+}
+
+// extractZipTo 把压缩包解到暂存目录；任一步失败只留下暂存目录，旧版本不受影响。
+func extractZipTo(ctx context.Context, filePath, stage string) error {
 	reader, err := zip.OpenReader(filePath)
 	if err != nil {
-		return "", apperr.New(apperr.KindCorrupt, "install.zip", "", err)
+		return apperr.New(apperr.KindCorrupt, "install.zip", "", err)
 	}
 	defer reader.Close()
 
 	for _, file := range reader.File {
 		if err := ctx.Err(); err != nil {
-			_ = os.RemoveAll(target)
-			return "", apperr.FromContext(err, "install.zip")
+			return apperr.FromContext(err, "install.zip")
 		}
-		name := filepath.Join(target, file.Name)
-		if !strings.HasPrefix(name, target+string(os.PathSeparator)) {
-			_ = os.RemoveAll(target)
-			return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包包含非法路径，请重试", nil)
+		name := filepath.Join(stage, file.Name)
+		if !strings.HasPrefix(name, stage+string(os.PathSeparator)) {
+			return apperr.New(apperr.KindCorrupt, "install.zip", "安装包包含非法路径，请重试", nil)
 		}
 		if file.FileInfo().IsDir() {
 			if err := os.MkdirAll(name, 0o755); err != nil {
-				return "", apperr.FromOS(err, "install.zip")
+				return apperr.FromOS(err, "install.zip")
 			}
 			continue
 		}
 		if err := extractZipMember(ctx, file, name); err != nil {
-			return "", err
+			return err
 		}
 	}
+	return nil
+}
 
-	var exePath string
-	_ = filepath.WalkDir(target, func(path string, entry os.DirEntry, err error) error {
-		if err == nil && !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".exe") && exePath == "" {
-			exePath = path
+func findExecutable(root string) string {
+	var found string
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err == nil && !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".exe") && found == "" {
+			found = path
 		}
 		return nil
 	})
-	if exePath == "" {
-		// 没有 exe 就无法记录启动路径，记录安装目录会让“已安装”变成只能打开文件夹；
-		// 视为安装失败并清理残留，避免留下无法识别的目录。
-		_ = os.RemoveAll(target)
-		return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包内未找到可执行文件（.exe），无法完成安装", nil)
-	}
-	return exePath, nil
+	return found
+}
+
+// CleanupStale 清理 7 天前的暂存与备份残留。
+func CleanupStale() {
+	atomicfs.CleanupStale(DefaultInstallDir(), 7*24*time.Hour)
 }
 
 func removeLocal(path string) error {

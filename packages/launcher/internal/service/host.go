@@ -62,6 +62,8 @@ func newHost(app *application.App, st *store.Store) *Host {
 	settings := loadSettings()
 	// 扫描已安装应用时要一并检查用户配置的安装目录。
 	install.SetInstallDir(settings.InstallDir)
+	// 启动时清理超过 7 天的暂存/备份残留，不影响正常安装。
+	install.CleanupStale()
 	if settings.DeviceID == "" {
 		settings.DeviceID = newDeviceID()
 		// 写盘失败只会导致下次启动重新生成标识，不影响启动与上报。
