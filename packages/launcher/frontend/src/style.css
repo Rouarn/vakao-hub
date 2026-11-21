@@ -418,6 +418,29 @@ button {
   font-size: 10px;
 }
 
+.op-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(70, 166, 198, 0.32);
+  border-radius: 4px;
+  background: rgba(70, 166, 198, 0.09);
+  color: #2f7f96;
+  font-size: 11px;
+}
+
+.op-bar button {
+  border: 1px solid rgba(70, 166, 198, 0.34);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
 .app-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1828,6 +1851,12 @@ button {
   border-color: rgba(240, 153, 120, 0.24);
   background: rgba(178, 58, 46, 0.12);
   color: #f0a69e;
+}
+
+[data-theme='dark'] .op-bar {
+  border-color: rgba(95, 190, 220, 0.26);
+  background: rgba(95, 190, 220, 0.1);
+  color: #a8dced;
 }
 
 [data-theme='dark'] .notice,

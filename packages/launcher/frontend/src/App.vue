@@ -16,10 +16,13 @@
     />
 
     <main ref="contentRef" class="content">
+      <div v-if="activeInstall" class="op-bar">
+        <span>正在安装 {{ activeInstall.name }}，可随时取消</span>
+        <button @click="cancelInstall">取消安装</button>
+      </div>
       <div v-if="errorInfo && errorInfo.kind !== 'canceled'" class="banner">
         <span>{{ errorInfo.message }}</span>
-        <button v-if="activeInstall" @click="cancelInstall">取消安装</button>
-        <button v-else-if="canRetry" @click="retryLast">重试</button>
+        <button v-if="canRetry" @click="retryLast">重试</button>
         <button @click="openLog">打开日志</button>
       </div>
 
@@ -172,7 +175,7 @@ const loading = ref(false);
 const saving = ref(false);
 const updatingAll = ref(false);
 const errorInfo = ref<UserError | null>(null);
-const activeInstall = ref<{ appKey: string; cancel: () => void } | null>(null);
+const activeInstall = ref<{ appKey: string; name: string; cancel: () => void } | null>(null);
 const canRetry = ref(false);
 let retryAction: (() => Promise<void>) | null = null;
 const busyKeys = ref<Record<string, boolean>>({});
@@ -308,7 +311,11 @@ function retryLast(): void {
 function cancelInstall(): void {
   const current = activeInstall.value;
   activeInstall.value = null;
-  current?.cancel();
+  if (!current) return;
+  const next = { ...progress.value };
+  delete next[current.appKey];
+  progress.value = next;
+  current.cancel();
 }
 
 function openLog(): void {
@@ -359,7 +366,7 @@ async function install(app: AppView): Promise<void> {
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
   clearError();
   const call = InstallService.Install(app.appKey, app.artifactID);
-  activeInstall.value = { appKey: app.appKey, cancel: () => call.cancel() };
+  activeInstall.value = { appKey: app.appKey, name: app.name, cancel: () => call.cancel() };
   try {
     await call;
     if (selfUpdate) {

@@ -13,6 +13,13 @@ export const FALLBACK_ERROR: UserError = {
   message: '操作失败，请稍后重试',
 };
 
+const CANCELED_ERROR: UserError = {
+  code: 'E_CANCELED',
+  kind: 'canceled',
+  retryable: false,
+  message: '已取消',
+};
+
 function parseJson(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -49,12 +56,31 @@ function fromUnknown(value: unknown, depth = 0): UserError | null {
   return fromUnknown(parsed, depth + 1);
 }
 
+function fromRawMessage(message: string): UserError | null {
+  const lower = message.toLowerCase();
+  // Wails 的 CancellablePromise.cancel() 会直接 reject CancelError("Promise cancelled.")，
+  // 不会等到 Go 侧返回结构化错误。
+  if (lower.includes('promise canceled') || lower.includes('promise cancelled')) {
+    return { ...CANCELED_ERROR };
+  }
+  // Wails 对取消调用的拒绝可能绕过 MarshalError，直接给 apperr.Error() 的文本。
+  if (lower.includes('context canceled') || lower.includes('context cancelled') || message.includes('已取消')) {
+    return { ...CANCELED_ERROR };
+  }
+  if (lower.includes('context deadline exceeded') || message.includes('操作超时')) {
+    return { code: 'E_TIMEOUT', kind: 'timeout', retryable: true, message: '操作超时，请重试' };
+  }
+  return null;
+}
+
 /**
  * 把 Wails 绑定调用抛出的错误解析为统一结构。
  * Wails v3 会把 MarshalError 的 JSON 放进 Error.message，个别情况下还会二次编码。
  */
 export function toUserError(error: unknown): UserError {
   if (error instanceof Error) {
+    if (error.name === 'CancelError') return { ...CANCELED_ERROR };
+
     const fromMessage = fromUnknown(error.message);
     if (fromMessage) return fromMessage;
 
@@ -65,5 +91,9 @@ export function toUserError(error: unknown): UserError {
 
   const direct = fromUnknown(error);
   if (direct) return direct;
+
+  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const fromRaw = fromRawMessage(raw);
+  if (fromRaw) return fromRaw;
   return { ...FALLBACK_ERROR };
 }
