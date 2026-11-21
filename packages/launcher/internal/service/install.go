@@ -297,7 +297,7 @@ func (s *InstallService) Uninstall(appKey string, deleteData bool) error {
 		bundleID = value
 	}
 
-	if err := install.Remove(item.InstallPath); err != nil {
+	if err := install.Remove(item.InstallPath, item.AppKey); err != nil {
 		return err
 	}
 	_ = s.host.store.Remove(appKey)

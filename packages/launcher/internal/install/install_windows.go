@@ -11,7 +11,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sys/windows"
 
 	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/atomicfs"
@@ -23,7 +26,7 @@ const installerTimeout = 30 * time.Minute
 func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
 	case contract.FormatZIP:
-		return installZip(ctx, filePath, appKey)
+		return installZip(ctx, filePath, appKey, targetPath, installDir)
 	case contract.FormatMSI:
 		if err := ctx.Err(); err != nil {
 			return "", apperr.FromContext(err, "install.msi")
@@ -46,7 +49,7 @@ func installLocal(ctx context.Context, format, filePath, appKey, appName, target
 		// 单文件便携应用没有安装器可调起，复制进托管目录并记录安装结果；
 		// 安装器（NSIS/Inno 等）仍按原来的方式交给系统向导。
 		if !isInstallerEXE(filePath) {
-			return installPortableEXE(ctx, filePath, appKey)
+			return installPortableEXE(ctx, filePath, appKey, targetPath, installDir)
 		}
 		command := exec.Command("cmd", "/c", "start", "", filePath)
 		// 安装器/便携程序通常按自身目录查找资源，不能继承启动器的工作目录。
@@ -110,16 +113,14 @@ func runSystemInstaller(ctx context.Context, command *exec.Cmd, timeout time.Dur
 	}
 }
 
-func installZip(ctx context.Context, filePath, appKey string) (string, error) {
-	base, err := os.UserConfigDir()
-	if err != nil {
+func installZip(ctx context.Context, filePath, appKey, targetPath, installDir string) (string, error) {
+	target := resolveContainer(appKey, targetPath, installDir)
+	if target == "" {
+		return "", apperr.New(apperr.KindInternal, "install.zip", "无法确定应用安装目录，请检查用户配置目录", nil)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", apperr.FromOS(err, "install.zip")
 	}
-	root := filepath.Join(base, "VaKaoHub", "apps")
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", apperr.FromOS(err, "install.zip")
-	}
-	target := filepath.Join(root, appKey)
 
 	stage, err := atomicfs.StageDirFor(target)
 	if err != nil {
@@ -193,12 +194,14 @@ func isInstallerEXE(path string) bool {
 
 // installPortableEXE 把没有安装器的单文件应用复制进托管目录，
 // 返回可直接记录的启动路径；暂存与换入复用 zip 安装的原子流程。
-func installPortableEXE(ctx context.Context, filePath, appKey string) (string, error) {
-	root := DefaultInstallDir()
-	if strings.TrimSpace(root) == "" {
+func installPortableEXE(ctx context.Context, filePath, appKey, targetPath, installDir string) (string, error) {
+	target := resolveContainer(appKey, targetPath, installDir)
+	if target == "" {
 		return "", apperr.New(apperr.KindInternal, "install.portable", "无法确定应用安装目录，请检查用户配置目录", nil)
 	}
-	target := filepath.Join(root, appKey)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return "", apperr.FromOS(err, "install.portable")
+	}
 	stage, err := atomicfs.StageDirFor(target)
 	if err != nil {
 		return "", err
@@ -254,25 +257,30 @@ func findExecutable(root string) string {
 
 // CleanupStale 清理 7 天前的暂存与备份残留。
 func CleanupStale() {
-	atomicfs.CleanupStale(DefaultInstallDir(), 7*24*time.Hour)
+	for _, root := range installRoots() {
+		atomicfs.CleanupStale(root, 7*24*time.Hour)
+	}
 }
 
-func removeLocal(path string) error {
-	base, err := os.UserConfigDir()
-	if err != nil {
-		return apperr.FromOS(err, "uninstall")
-	}
-	root := filepath.Join(base, "VaKaoHub", "apps")
-	clean := filepath.Clean(path)
-	if !strings.HasPrefix(clean, root+string(os.PathSeparator)) {
+func removeLocal(path, appKey string) error {
+	container, ok := containerOf(path, appKey)
+	if !ok {
 		return apperr.New(
 			apperr.KindPermission,
 			"uninstall",
-			fmt.Sprintf("拒绝删除 %s 之外的路径；MSI 安装请使用系统卸载", root),
+			fmt.Sprintf("拒绝删除无法确认归属的路径：%s", path),
 			nil,
 		)
 	}
-	if err := os.RemoveAll(clean); err != nil {
+	if isDriveRoot(container) || isSystemProtectedDir(container) {
+		return apperr.New(
+			apperr.KindPermission,
+			"uninstall",
+			fmt.Sprintf("拒绝删除受保护的路径：%s", container),
+			nil,
+		)
+	}
+	if err := os.RemoveAll(container); err != nil {
 		return apperr.FromOS(err, "uninstall")
 	}
 	return nil
@@ -294,8 +302,19 @@ func launchLocal(path string) error {
 	return nil
 }
 
-// DefaultInstallDir 返回 MSI/EXE 之外的 zip 应用落点，与 installZip 保持一致。
+// DefaultInstallDir 返回托管应用的默认安装根目录：%LOCALAPPDATA%\Programs\VaKaoHub。
+// 放在 Local 而非 Roaming，避免可执行文件被漫游配置同步；%LOCALAPPDATA% 缺失时
+// 回落到 1.1.2 及更早版本的旧落点，保证始终有确定可写的位置。
 func DefaultInstallDir() string {
+	if base := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); base != "" {
+		return filepath.Join(base, "Programs", "VaKaoHub")
+	}
+	return legacyInstallDir()
+}
+
+// legacyInstallDir 是旧版本的固定落点，仍参与识别、卸载与残留清理，
+// 避免用户手动删掉文件后界面还留着记录，或反过来完全识别不到。
+func legacyInstallDir() string {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return ""
@@ -303,13 +322,193 @@ func DefaultInstallDir() string {
 	return filepath.Join(base, "VaKaoHub", "apps")
 }
 
-// ValidateInstallDir Windows 的安装位置由安装包决定，不接受自定义目录。
-func ValidateInstallDir(dir string) error {
-	if strings.TrimSpace(dir) == "" {
-		return nil
+// installRoot 返回实际使用的安装根目录，空配置回落到默认目录。
+func installRoot(installDir string) string {
+	if root := ExpandDir(installDir); root != "" {
+		return root
 	}
-	return apperr.New(apperr.KindUnsupported, "install.dir", "Windows 的安装位置由安装包决定，无法自定义", nil)
+	return DefaultInstallDir()
 }
 
-// SetInstallDir Windows 不参与目录扫描（MSI 走卸载注册表），保持空实现。
-func SetInstallDir(dir string) {}
+// installRoots 汇总需要扫描与清理的根目录：默认、旧版落点、当前配置。
+func installRoots() []string {
+	seen := make(map[string]struct{}, 3)
+	roots := make([]string, 0, 3)
+	for _, dir := range []string{DefaultInstallDir(), legacyInstallDir(), configuredInstallDir()} {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		key := strings.ToLower(filepath.Clean(dir))
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		roots = append(roots, dir)
+	}
+	return roots
+}
+
+// resolveContainer 决定应用容器目录（<root>\<appKey>）。
+// 升级已有安装时必须留在原容器：否则用户改了设置后，一次更新就会把应用静默搬家，
+// 旧目录还会残留一份。只有反推不出容器时才回落到当前配置/默认目录。
+func resolveContainer(appKey, targetPath, installDir string) string {
+	if container, ok := containerOf(targetPath, appKey); ok {
+		return container
+	}
+	root := installRoot(installDir)
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, appKey)
+}
+
+// containerOf 从安装路径向上找到名为 appKey 的那一级目录（大小写不敏感）。
+func containerOf(path, appKey string) (string, bool) {
+	appKey = strings.TrimSpace(appKey)
+	if strings.TrimSpace(path) == "" || appKey == "" {
+		return "", false
+	}
+	clean := filepath.Clean(path)
+	for {
+		if strings.EqualFold(filepath.Base(clean), appKey) {
+			return clean, true
+		}
+		parent := filepath.Dir(clean)
+		if parent == clean {
+			return "", false
+		}
+		clean = parent
+	}
+}
+
+// ValidateInstallDir 校验用户选择的便携应用目录：
+// 必须已存在、可写、位于本机固定磁盘，且不是盘符根或系统目录。
+func ValidateInstallDir(dir string) error {
+	dir = ExpandDir(dir)
+	if dir == "" {
+		return nil
+	}
+	if !filepath.IsAbs(dir) {
+		return apperr.New(apperr.KindInternal, "install.dir", "安装目录必须是绝对路径", nil)
+	}
+	clean := filepath.Clean(dir)
+	if isDriveRoot(clean) {
+		return apperr.New(apperr.KindInternal, "install.dir", "请不要直接选择磁盘根目录，请新建一个专用目录", nil)
+	}
+	if err := validateFixedVolume(clean); err != nil {
+		return err
+	}
+	if isProtectedInstallRoot(clean) {
+		return apperr.New(apperr.KindPermission, "install.dir", "不能选择系统目录或启动器配置目录，请换一个位置", nil)
+	}
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() {
+		return apperr.New(apperr.KindInternal, "install.dir", fmt.Sprintf("安装目录不存在：%s", clean), err)
+	}
+	if !IsDirWritable(clean) {
+		return apperr.New(apperr.KindPermission, "install.dir", "", nil)
+	}
+	// 还要拼上 <appKey>\<文件名>，给 MAX_PATH 留出余量。
+	if len(clean) > maxInstallRootLength {
+		return apperr.New(apperr.KindInternal, "install.dir", "目录路径过长，请换一个更短的路径", nil)
+	}
+	return nil
+}
+
+const maxInstallRootLength = 180
+
+// validateFixedVolume 只接受本机固定磁盘：移动盘拔出、网络盘断线都会让应用直接打不开。
+func validateFixedVolume(dir string) error {
+	volume := filepath.VolumeName(dir)
+	if volume == "" {
+		return apperr.New(apperr.KindInternal, "install.dir", "安装目录必须是带盘符的本地路径", nil)
+	}
+	root, err := windows.UTF16PtrFromString(volume + `\`)
+	if err != nil {
+		return apperr.New(apperr.KindInternal, "install.dir", "安装目录无效", err)
+	}
+	switch windows.GetDriveType(root) {
+	case windows.DRIVE_FIXED:
+		return nil
+	case windows.DRIVE_REMOVABLE:
+		return apperr.New(
+			apperr.KindUnsupported,
+			"install.dir",
+			"只能选择本机固定磁盘上的目录；移动磁盘拔出后应用会打不开",
+			nil,
+		)
+	case windows.DRIVE_REMOTE:
+		return apperr.New(
+			apperr.KindUnsupported,
+			"install.dir",
+			"不能选择网络位置，请使用本机固定磁盘上的目录",
+			nil,
+		)
+	default:
+		return apperr.New(apperr.KindUnsupported, "install.dir", "该位置不是可用的本地磁盘，请换一个目录", nil)
+	}
+}
+
+func isDriveRoot(dir string) bool {
+	volume := filepath.VolumeName(dir)
+	if volume == "" {
+		return false
+	}
+	return strings.EqualFold(filepath.Clean(dir), filepath.Clean(volume+`\`))
+}
+
+// isSystemProtectedDir 用于删除校验：只保护系统目录树，不涉及配置目录，
+// 否则旧落点 %AppData%\VaKaoHub\apps 下的应用将无法卸载。
+func isSystemProtectedDir(dir string) bool {
+	clean := strings.ToLower(filepath.Clean(dir))
+	for _, key := range []string{"SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"} {
+		root := os.Getenv(key)
+		if root == "" {
+			continue
+		}
+		base := strings.ToLower(filepath.Clean(root))
+		if clean == base || strings.HasPrefix(clean, base+`\`) {
+			return true
+		}
+	}
+	return false
+}
+
+// isProtectedInstallRoot 用于选择校验：系统目录、用户主目录根本身、
+// 以及启动器配置目录（含旧版 apps 落点）都不接受作为新的安装根目录。
+func isProtectedInstallRoot(dir string) bool {
+	if isSystemProtectedDir(dir) {
+		return true
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.EqualFold(filepath.Clean(dir), filepath.Clean(home)) {
+		return true
+	}
+	if config, err := os.UserConfigDir(); err == nil {
+		base := filepath.Clean(filepath.Join(config, "vakaohub"))
+		clean := filepath.Clean(dir)
+		if strings.EqualFold(clean, base) || strings.HasPrefix(strings.ToLower(clean), strings.ToLower(base)+`\`) {
+			return true
+		}
+	}
+	return false
+}
+
+// scanInstallDir 是用户配置的安装根目录，参与清理与已安装扫描。
+var (
+	scanDirMu      sync.RWMutex
+	scanInstallDir string
+)
+
+// SetInstallDir 记住配置的安装根目录并失效扫描缓存；传空串恢复默认。
+func SetInstallDir(dir string) {
+	scanDirMu.Lock()
+	scanInstallDir = ExpandDir(dir)
+	scanDirMu.Unlock()
+	InvalidateIndex()
+}
+
+func configuredInstallDir() string {
+	scanDirMu.RLock()
+	defer scanDirMu.RUnlock()
+	return scanInstallDir
+}

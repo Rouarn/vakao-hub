@@ -159,7 +159,7 @@ func CleanupStale() {
 	atomicfs.CleanupStale(DefaultInstallDir(), 7*24*time.Hour)
 }
 
-func removeLocal(path string) error {
+func removeLocal(path, _ string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return apperr.FromOS(err, "uninstall")

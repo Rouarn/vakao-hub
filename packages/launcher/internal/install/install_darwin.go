@@ -302,7 +302,7 @@ func findApp(root string) (string, error) {
 	return found, nil
 }
 
-func removeLocal(path string) error {
+func removeLocal(path, _ string) error {
 	clean := filepath.Clean(path)
 	if filepath.Ext(clean) != ".app" {
 		return apperr.New(apperr.KindInternal, "uninstall", fmt.Sprintf("拒绝删除非 .app 路径：%s", path), nil)

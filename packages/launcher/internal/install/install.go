@@ -18,11 +18,12 @@ func Install(ctx context.Context, format, filePath, appKey, appName, targetPath,
 }
 
 // Remove 删除已安装应用（仅允许平台约定的安装目录）。
-func Remove(path string) error {
+// appKey 用于确认路径确实属于该应用的容器目录，避免误删同级其它内容。
+func Remove(path, appKey string) error {
 	if path == "" {
 		return apperr.New(apperr.KindInternal, "uninstall", "没有记录安装路径，无法自动卸载", nil)
 	}
-	return removeLocal(path)
+	return removeLocal(path, appKey)
 }
 
 // Launch 启动已安装应用。
