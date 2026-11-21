@@ -75,7 +75,7 @@ Windows 需要 Windows 机器或 CI。仓库提供 [`.github/workflows/launcher-
 需要本地服务已启动，并已在后台创建 `wiredeck` 应用与 macOS 产物：
 
 ```bash
-VAKAO_HUB_SMOKE=1 go test -run TestSMOKECatalogAndInstall -v .
+VAKAO_HUB_SMOKE=1 go test -run TestSMOKECatalogAndInstall -v ./internal/service
 ```
 
 测试会真实下载 DMG、校验 SHA-256、安装到 `~/Applications`；`TestSMOKEUninstall` 会卸载并校验记录被清除。半包续传可通过预先放置 `~/Library/Caches/vakaohub/downloads/<artifactID>.part` 验证。
@@ -84,10 +84,18 @@ VAKAO_HUB_SMOKE=1 go test -run TestSMOKECatalogAndInstall -v .
 
 ```
 launcher/
-├─ app.go                 # Wails 绑定：目录/安装/启动/设置/进度事件
-├─ settings.go            # 服务地址持久化
+├─ main.go                # Wails v3 入口与绑定注册
+├─ ship.sh                # 构建、门禁与发布
 ├─ internal/api/          # 分发服务 HTTP 客户端与类型
+├─ internal/service/      # 绑定层：目录、安装、启动、设置、事件
+├─ internal/install/      # 分平台安装、检测、启动与卸载
+├─ internal/atomicfs/     # 原子换入、回滚与暂存清理
+├─ internal/contract/     # 跨层共享的契约常量与类型
 ├─ internal/store/        # 已安装应用记录
-├─ internal/install/      # 分平台安装与启动
+├─ internal/version/      # 构建版本注入
+├─ internal/apperr/       # 统一错误类型与展示文案
+├─ internal/logging/      # 日志与 panic 落盘
+├─ internal/selfupdate/   # 自更新暂存、校验与替换
+├─ internal/updater/      # 独立更新 helper
 └─ frontend/              # Vue 3 界面
 ```

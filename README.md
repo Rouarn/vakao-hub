@@ -123,15 +123,18 @@ pnpm dev:admin
 - MySQL 8：事件表会持续增长，且现有项目均使用 MySQL；生产 `DB_SYNCHRONIZE=false`，改表走迁移。迁移文件幂等（按列检测补齐），开发库即使先由 synchronize 建表，之后再执行迁移也会正常记录，不会出现 Duplicate column。
 - 存储：产物落在 `STORAGE_DIR/{appKey}/v{versionCode}_{versionName}/`，按应用与版本分目录；删除版本/应用会清理磁盘文件。
 - 安全：产物 SHA-256 入库，下载支持 ETag/Range；管理端 JWT；上传有扩展名与格式/平台一致性校验。后续补代码签名与 manifest 签名。
-- 尚未实现（按计划推进）：产物魔数校验、代码签名校验、灰度自动递增、Windows 安装链路。
+- 尚未实现（按计划推进）：产物魔数校验、代码签名校验、灰度自动递增。
 
 ## 桌面启动器
 
 ```bash
 cd packages/launcher
-wails dev     # 开发（Vite 热更新）
-wails build -ldflags "-X vakaohub/launcher/internal/version.Version=$(node -p "require('./wails.json').info.productVersion")"   # 产出 build/bin/VaKaoHub.app
+wails3 task dev                                       # 开发（Vite 热更新）
+VERSION=$(node ../../scripts/version.mjs)
+wails3 task darwin:package APP_VERSION="$VERSION"     # 产出 bin/VaKaoHub.app
 ```
+
+发布统一走 `./ship.sh`（默认 macOS，`--win32` 出 Windows exe），详见包内 README。
 
 启动器读取 catalog，按平台/架构选择产物，支持自检测、重复安装提示、断点续传、SHA-256 与代码签名校验、强更拦截；macOS 将 DMG/ZIP 安装到 `~/Applications` 并支持启动、卸载、自动刷新更新状态。默认连接生产服务 `https://dist.woyuxiaji.cn/api/v1`，本地开发可在应用「设置」中修改。真实安装冒烟测试见 [packages/launcher/README.md](packages/launcher/README.md)。
 

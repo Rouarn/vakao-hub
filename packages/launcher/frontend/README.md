@@ -15,18 +15,20 @@ src/
 │   ├── StatusBar.vue       # 上次检查、来源、服务状态、外链
 │   └── UninstallDialog.vue # 卸载确认与数据删除选项
 ├── composables/
-│   └── useTheme.ts         # 明暗/跟随系统、原生标题栏、持久化
+│   ├── useTheme.ts         # 明暗/跟随系统切换与持久化
+│   └── useWindowDrag.ts    # 自定义顶栏拖拽窗口
 ├── lib/
-│   ├── detail-meta.ts      # 应用详情静态文案
+│   ├── constants.ts        # 启动器自身 appKey 等常量
+│   ├── errors.ts           # 后端错误到用户可读文案的映射
 │   ├── format.ts           # 日期、大小、首字母、进度格式化
 │   ├── meta.ts             # 详情类型
 │   ├── theme.ts            # 主题色、哈希色、色值工具
 │   └── version.ts          # 版本比较
-└── api.ts                  # Wails 绑定与 API 类型
+└── bindings/               # wails3 生成的 Go 绑定（不要手改）
 ```
 
 ## 约束
 
 - `App.vue` 不直接写大段页面结构，只负责组合组件和业务状态。
 - 新 UI 片段优先放入 `components/`，公共逻辑放入 `composables/` 或 `lib/`。
-- 修改后执行 `npm run build`；发布前执行 `wails build`。
+- 修改后执行 `pnpm build`（含 `vue-tsc` 类型检查）；发布前用 `wails3 task darwin:package` 或 `./ship.sh`。
