@@ -60,10 +60,12 @@
               spellcheck="false"
               placeholder="https://dist.woyuxiaji.cn/api/v1"
             />
-            <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
+            <p v-if="statusFor('baseUrl')" class="settings-status" :class="{ error: statusFor('baseUrl')?.error }">
+              {{ statusFor('baseUrl')?.message }}
+            </p>
             <div class="settings-actions">
               <button class="settings-secondary" @click="$emit('reset')">恢复默认</button>
-              <button class="settings-primary" :disabled="saving" @click="$emit('save')">保存</button>
+              <button class="settings-primary" :disabled="saving" @click="$emit('save-base-url')">保存</button>
             </div>
           </section>
         </div>
@@ -89,8 +91,16 @@
                 选择…
               </button>
             </div>
+            <p
+              v-if="statusFor('installDir')"
+              class="settings-status"
+              :class="{ error: statusFor('installDir')?.error }"
+            >
+              {{ statusFor('installDir')?.message }}
+            </p>
             <div v-if="installDirEditable" class="settings-actions">
               <button class="settings-secondary" @click="$emit('reset-install-dir')">恢复默认</button>
+              <button class="settings-primary" :disabled="saving" @click="$emit('save-install-dir')">保存</button>
             </div>
             <p v-if="!installDirEditable" class="settings-note">Windows 由安装包决定位置，此项仅 macOS 生效。</p>
             <p v-else class="settings-note">
@@ -136,7 +146,13 @@
 import starUrl from '../assets/star.png';
 import type { ThemeMode } from '../composables/useTheme';
 
-defineProps<{
+interface SettingsStatus {
+  field: 'baseUrl' | 'installDir';
+  error: boolean;
+  message: string;
+}
+
+const props = defineProps<{
   visible: boolean;
   themeMode: ThemeMode;
   serviceOnline: boolean;
@@ -148,8 +164,13 @@ defineProps<{
   launcherVersion: string;
   defaultInstallDir: string;
   installDirEditable: boolean;
-  settingsError: string;
+  settingsStatus: SettingsStatus | null;
 }>();
+
+// 只显示属于当前卡片的保存结果，两张卡片的反馈互不干扰。
+function statusFor(field: SettingsStatus['field']): SettingsStatus | null {
+  return props.settingsStatus?.field === field ? props.settingsStatus : null;
+}
 
 const baseUrl = defineModel<string>('baseUrl', { required: true });
 const installDir = defineModel<string>('installDir', { required: true });
@@ -157,7 +178,8 @@ const refreshMinutes = defineModel<number>('refreshMinutes', { required: true })
 
 defineEmits<{
   close: [];
-  save: [];
+  'save-base-url': [];
+  'save-install-dir': [];
   reset: [];
   'select-install-dir': [];
   'reset-install-dir': [];

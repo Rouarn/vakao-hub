@@ -86,6 +86,14 @@ func (s *SettingsService) GetSettings() Settings {
 	return s.host.settings.Get()
 }
 
+// GetStartupNotice 返回启动时发现的配置问题（只提示一次）。
+// 目录不可用时已回落到默认目录，这里把原因明确告诉用户，避免无声回退。
+func (s *SettingsService) GetStartupNotice() string {
+	notice := startupNotice
+	startupNotice = ""
+	return notice
+}
+
 func (s *SettingsService) SaveSettings(baseURL, installDir string) (Settings, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -135,6 +143,9 @@ func configDir() (string, error) {
 	return filepath.Join(dir, "vakaohub"), nil
 }
 
+// startupNotice 保存启动时发现、需要提示用户一次的配置问题。
+var startupNotice string
+
 func loadSettings() Settings {
 	settings := Settings{BaseURL: defaultBaseURL}
 	dir, err := configDir()
@@ -152,9 +163,14 @@ func loadSettings() Settings {
 	if settings.BaseURL == "" {
 		settings.BaseURL = defaultBaseURL
 	}
-	// 目录不存在或不可写时回落到默认目录，避免带着坏配置启动后处处装不上。
+	// 目录不存在或不可写时回落到默认目录，避免带着坏配置启动后处处装不上；
+	// 同时记录原因，启动后明确提示用户，不能无声回退。
 	settings.InstallDir = strings.TrimSpace(settings.InstallDir)
 	if err := install.ValidateInstallDir(settings.InstallDir); err != nil {
+		startupNotice = fmt.Sprintf(
+			"上次保存的安装目录「%s」不可用（%v），已改用默认目录，请重新选择并保存。",
+			settings.InstallDir, err,
+		)
 		settings.InstallDir = ""
 	}
 	return settings

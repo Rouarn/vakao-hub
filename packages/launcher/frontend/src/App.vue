@@ -107,12 +107,13 @@
       :launcher-version="launcherVersion"
       :default-install-dir="defaultInstallDir"
       :install-dir-editable="installDirEditable"
-      :settings-error="settingsError"
+      :settings-status="settingsStatus"
       @close="settingsVisible = false"
-      @save="saveSettings"
+      @save-base-url="saveBaseUrl"
+      @save-install-dir="saveInstallDir"
       @reset="resetBaseUrl"
       @select-install-dir="chooseInstallDir"
-      @reset-install-dir="draftInstallDir = ''"
+      @reset-install-dir="resetInstallDir"
       @theme-mode="setThemeMode"
       @refresh-changed="saveRefreshInterval"
       @refresh-now="load"
@@ -163,6 +164,13 @@ import { useTheme } from './composables/useTheme';
 import { appColor, hexToRgba, shadeColor } from './lib/theme';
 import { compareVersion } from './lib/version';
 
+// 设置弹窗里两张卡片各自的保存结果；field 决定提示显示在哪张卡片下。
+interface SettingsStatus {
+  field: 'baseUrl' | 'installDir';
+  error: boolean;
+  message: string;
+}
+
 const apps = ref<AppView[]>([]);
 const platform = ref('');
 const arch = ref('');
@@ -195,7 +203,7 @@ let retryAction: (() => Promise<void>) | null = null;
 const busyKeys = ref<Record<string, boolean>>({});
 const progress = ref<Record<string, Progress>>({});
 const settingsVisible = ref(false);
-const settingsError = ref('');
+const settingsStatus = ref<SettingsStatus | null>(null);
 const uninstallTarget = ref<AppView | null>(null);
 const deleteUninstallData = ref(false);
 const runningTarget = ref<AppView | null>(null);
@@ -571,7 +579,7 @@ function closeMenu(): void {
 function openSettings(): void {
   draftBaseUrl.value = settings.value.baseUrl;
   draftInstallDir.value = settings.value.installDir ?? '';
-  settingsError.value = '';
+  settingsStatus.value = null;
   settingsVisible.value = true;
   // 默认目录由主进程给，避免前端再写一份 ~/Applications。
   InstallService.GetDefaultInstallDir()
@@ -583,26 +591,51 @@ function openSettings(): void {
 
 // 目录选择器返回空串代表用户取消；选择阶段就做可写校验，错误留在弹窗里展示。
 async function chooseInstallDir(): Promise<void> {
-  settingsError.value = '';
+  settingsStatus.value = null;
   try {
     const dir = await InstallService.SelectInstallDir();
     if (dir) draftInstallDir.value = dir;
   } catch (cause) {
     const info = toUserError(cause);
-    settingsError.value = info.kind === 'canceled' ? '' : info.message;
+    settingsStatus.value = {
+      field: 'installDir',
+      error: true,
+      message: info.kind === 'canceled' ? '' : info.message,
+    };
   }
 }
 
-async function saveSettings(): Promise<void> {
+// 保存分发服务地址：只提交这张卡片的字段，另一项沿用已保存值。
+async function saveBaseUrl(): Promise<void> {
   saving.value = true;
   clearError();
-  settingsError.value = '';
+  settingsStatus.value = null;
   try {
-    settings.value = await SettingsService.SaveSettings(draftBaseUrl.value, draftInstallDir.value);
-    settingsVisible.value = false;
+    const saved = await SettingsService.SaveSettings(draftBaseUrl.value, settings.value.installDir ?? '');
+    settings.value = saved;
+    draftBaseUrl.value = saved.baseUrl;
+    settingsStatus.value = { field: 'baseUrl', error: false, message: '保存成功' };
     await load();
   } catch (cause) {
-    settingsError.value = toUserError(cause).message;
+    settingsStatus.value = { field: 'baseUrl', error: true, message: toUserError(cause).message };
+  } finally {
+    saving.value = false;
+  }
+}
+
+// 保存安装位置：同样只提交本卡片字段，成功后留在弹窗里，关闭动作仍丢弃草稿。
+async function saveInstallDir(): Promise<void> {
+  saving.value = true;
+  clearError();
+  settingsStatus.value = null;
+  try {
+    const saved = await SettingsService.SaveSettings(settings.value.baseUrl, draftInstallDir.value);
+    settings.value = saved;
+    draftInstallDir.value = saved.installDir ?? '';
+    settingsStatus.value = { field: 'installDir', error: false, message: '保存成功' };
+    await load();
+  } catch (cause) {
+    settingsStatus.value = { field: 'installDir', error: true, message: toUserError(cause).message };
   } finally {
     saving.value = false;
   }
@@ -636,6 +669,13 @@ function saveRefreshInterval(): void {
 
 async function resetBaseUrl(): Promise<void> {
   draftBaseUrl.value = await SettingsService.GetDefaultBaseURL();
+  settingsStatus.value = null;
+}
+
+// 恢复默认只改草稿，仍要点「保存」才写盘。
+function resetInstallDir(): void {
+  draftInstallDir.value = '';
+  settingsStatus.value = null;
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -693,9 +733,21 @@ async function loadUpdateNotice(): Promise<void> {
   }
 }
 
+// 启动时安装目录失效的提示只出现一次：读取后主进程会清空。
+async function loadStartupNotice(): Promise<void> {
+  try {
+    const message = await SettingsService.GetStartupNotice();
+    if (!message) return;
+    const previous = updateNotice.value?.message ? `${updateNotice.value.message}；` : '';
+    updateNotice.value = { status: 'warning', message: previous + message, updatedAt: Date.now() };
+  } catch {
+    // 开发模式（浏览器）没有 Wails 运行时，忽略即可。
+  }
+}
+
 onMounted(() => {
   void load();
-  void loadUpdateNotice();
+  void loadUpdateNotice().then(loadStartupNotice);
   window.addEventListener('click', closeMenu);
   window.addEventListener('keydown', onKeydown);
   offProgress = Events.On(InstallProgress, (event) => onProgress(event.data as Progress));
