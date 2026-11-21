@@ -4,9 +4,9 @@ import type { ReleaseEntity } from './release.entity.js';
 
 /**
  * 发布产物：一个版本下可以有多份文件。
- * Android: platform=android, format=apk
- * macOS:   platform=darwin,  format=dmg, arch=arm64|x64|universal
- * Windows: platform=win32,   format=msi|exe|zip
+ * Android：platform=android，format=apk
+ * macOS：platform=darwin，format=dmg，arch=arm64|x64|universal
+ * Windows：platform=win32，format=msi|exe|zip
  */
 @Entity('hub_artifacts')
 @Index(['releaseId', 'platform', 'arch', 'format'], { unique: true })

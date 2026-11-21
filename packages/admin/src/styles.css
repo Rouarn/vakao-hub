@@ -106,7 +106,7 @@ body {
   margin-top: 16px;
 }
 
-/* ---------- Naive UI surface ---------- */
+/* ---------- Naive UI 表面层 ---------- */
 
 .n-card {
   box-shadow: 0 1px 2px var(--shadow-soft) !important;
@@ -180,7 +180,7 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* legacy page helpers used by table views */
+/* 表格页沿用的旧版辅助样式 */
 .page .n-card {
   margin-bottom: 14px;
 }
