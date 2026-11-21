@@ -61,7 +61,7 @@
     <div class="card-bottom">
       <button
         class="action"
-        :disabled="busy || updatingAll || !supportsOs || (app.running && (!isSelf(app) || !app.hasUpdate))"
+        :disabled="busy || updatingAll || !supportsOs || (app.running && !app.hasUpdate)"
         @click.stop="$emit('primary-action', app)"
       >
         <template v-if="app.hasUpdate">更新至 {{ app.latestVersion }}</template>
@@ -88,15 +88,9 @@
 </template>
 
 <script setup lang="ts">
-import { SELF_APP_KEY } from '../lib/constants';
 import type { AppView, Progress } from '../../bindings/vakaohub/launcher/internal/service';
 import { appColor } from '../lib/theme';
 import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
-
-// 启动器自身始终处于运行中，但允许在运行中更新（由主进程走后台替换流程）。
-function isSelf(app: AppView): boolean {
-  return app.appKey === SELF_APP_KEY;
-}
 
 defineProps<{
   app: AppView;

@@ -17,7 +17,7 @@
 
     <main ref="contentRef" class="content">
       <div v-if="activeInstall" class="op-bar">
-        <span>正在安装 {{ activeInstall.name }}，可随时取消</span>
+        <span>{{ activeInstallMessage || `正在安装 ${activeInstall.name}，可随时取消` }}</span>
         <button @click="cancelInstall">取消安装</button>
       </div>
       <div v-if="updateNotice" class="update-notice">
@@ -119,6 +119,14 @@
       @open-url="openUrl"
     />
 
+    <RunningDialog
+      :target="runningTarget"
+      :message="runningMessage"
+      :busy="quitting"
+      @close="closeRunningDialog"
+      @confirm="quitAndInstall"
+    />
+
     <UninstallDialog
       v-model:delete-data="deleteUninstallData"
       :target="uninstallTarget"
@@ -147,6 +155,7 @@ import type { DetailMeta } from './lib/meta';
 import AppCard from './components/AppCard.vue';
 import AppDetailPanel from './components/AppDetailPanel.vue';
 import LauncherHeader from './components/LauncherHeader.vue';
+import RunningDialog from './components/RunningDialog.vue';
 import SettingsModal from './components/SettingsModal.vue';
 import StatusBar from './components/StatusBar.vue';
 import UninstallDialog from './components/UninstallDialog.vue';
@@ -189,6 +198,9 @@ const settingsVisible = ref(false);
 const settingsError = ref('');
 const uninstallTarget = ref<AppView | null>(null);
 const deleteUninstallData = ref(false);
+const runningTarget = ref<AppView | null>(null);
+const runningMessage = ref('');
+const quitting = ref(false);
 const draftBaseUrl = ref('');
 const draftInstallDir = ref('');
 const defaultInstallDir = ref('~/Applications');
@@ -204,6 +216,12 @@ const lastCheckedAt = ref(0);
 const now = ref(Date.now());
 
 const updateCount = computed(() => apps.value.filter((app) => app.hasUpdate).length);
+
+// 安装进度里带的是当前步骤（下载、退出应用、安装），用户能据此知道走到了哪一步。
+const activeInstallMessage = computed(() => {
+  const current = activeInstall.value;
+  return current ? (progress.value[current.appKey]?.message ?? '') : '';
+});
 
 const lastCheckedLabel = computed(() => {
   if (!lastCheckedAt.value) return '尚未检查';
@@ -360,9 +378,8 @@ async function load(): Promise<void> {
 }
 
 async function install(app: AppView): Promise<void> {
-  // 其它应用运行中不能覆盖安装；启动器自身走自更新替换流程，允许在运行中执行。
+  // 启动器自身走自更新替换流程，允许在运行中执行；其它运行中的应用由主进程检测并返回 running。
   const selfUpdate = app.appKey === SELF_APP_KEY;
-  if (app.running && !selfUpdate) return;
   if (!supportsOs(app)) {
     showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
     return;
@@ -380,8 +397,47 @@ async function install(app: AppView): Promise<void> {
     }
     await load();
   } catch (cause) {
+    const info = toUserError(cause);
+    if (info.kind === 'running' && !selfUpdate) {
+      // 首次命中不结束进程，先让用户确认；确认后走 QuitAppsAndInstall 继续这次更新。
+      runningTarget.value = app;
+      runningMessage.value = info.message;
+      return;
+    }
     showError(cause, () => install(app));
   } finally {
+    if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
+    const next = { ...busyKeys.value };
+    delete next[app.appKey];
+    busyKeys.value = next;
+  }
+}
+
+function closeRunningDialog(): void {
+  if (quitting.value) return;
+  runningTarget.value = null;
+  runningMessage.value = '';
+}
+
+// 用户确认「退出并更新」：主进程先请求正常退出，再自动继续同一次安装。
+async function quitAndInstall(): Promise<void> {
+  const app = runningTarget.value;
+  if (!app || quitting.value) return;
+  quitting.value = true;
+  clearError();
+  busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
+  const call = InstallService.QuitAppsAndInstall(app.appKey, app.artifactID);
+  activeInstall.value = { appKey: app.appKey, name: app.name, cancel: () => call.cancel() };
+  try {
+    await call;
+    runningTarget.value = null;
+    runningMessage.value = '';
+    await load();
+  } catch (cause) {
+    // 退出失败时保留弹窗，把具体原因放在原处，用户可以直接重试或取消。
+    runningMessage.value = toUserError(cause).message;
+  } finally {
+    quitting.value = false;
     if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
     const next = { ...busyKeys.value };
     delete next[app.appKey];
@@ -424,9 +480,9 @@ async function primaryAction(app: AppView): Promise<void> {
     showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
     return;
   }
-  // 已在运行的应用不再执行打开；启动器自身只在「有更新」时走自更新替换。
+  // 已在运行的应用不执行打开；有更新时进入安装流程，由主进程决定是否需要先退出。
   if (app.running) {
-    if (app.appKey === SELF_APP_KEY && app.hasUpdate) {
+    if (app.hasUpdate) {
       await install(app);
     }
     return;
@@ -594,7 +650,9 @@ function onKeydown(event: KeyboardEvent): void {
     return;
   }
   if (event.key !== 'Escape') return;
-  if (uninstallTarget.value) {
+  if (runningTarget.value) {
+    closeRunningDialog();
+  } else if (uninstallTarget.value) {
     uninstallTarget.value = null;
   } else if (settingsVisible.value) {
     settingsVisible.value = false;

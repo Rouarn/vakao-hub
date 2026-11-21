@@ -24,8 +24,17 @@ func NewInstall(host *Host) *InstallService {
 	return &InstallService{host: host}
 }
 
-// Install 下载、校验并安装指定产物。
+// Install 下载、校验并安装指定产物；目标应用正在运行时返回可识别的 running 错误。
 func (s *InstallService) Install(ctx context.Context, appKey string, artifactID int) (store.Installed, error) {
+	return s.install(ctx, appKey, artifactID, false)
+}
+
+// QuitAppsAndInstall 在用户确认后先退出目标应用，再继续完成同一次安装。
+func (s *InstallService) QuitAppsAndInstall(ctx context.Context, appKey string, artifactID int) (store.Installed, error) {
+	return s.install(ctx, appKey, artifactID, true)
+}
+
+func (s *InstallService) install(ctx context.Context, appKey string, artifactID int, quitRunning bool) (store.Installed, error) {
 	opID, release, err := s.host.beginOp()
 	if err != nil {
 		return store.Installed{}, err
@@ -110,7 +119,7 @@ func (s *InstallService) Install(ctx context.Context, appKey string, artifactID 
 	}
 
 	// 启动器更新自身：运行中的 bundle 不能就地覆盖，交给后台脚本在本进程退出后替换。
-	if appKey == "vakaohub" {
+	if appKey == selfAppKey {
 		s.host.emit(appKey, opID, "installing", 100, "正在准备替换启动器", false)
 		if err := s.selfUpdate(ctx, artifact.Format, filePath); err != nil {
 			s.host.onceEvent(eventKey+":install_fail", withType(event, eventInstallFail))
@@ -139,6 +148,36 @@ func (s *InstallService) Install(ctx context.Context, appKey string, artifactID 
 	if existingPath == "" {
 		if found := install.FindApps(app.Name); len(found) > 0 {
 			existingPath = found[0].Path
+		}
+	}
+
+	// 安装前检查目标目录内是否有进程占用：首次命中只返回 running 错误，
+	// 由前端确认后再走 QuitAppsAndInstall 继续，不在未确认时结束任何进程。
+	if existingPath != "" {
+		processes, detectErr := s.detectRunning(appKey, existingPath)
+		if detectErr != nil {
+			slog.Warn("检测运行中应用失败", "app", appKey, "error", detectErr)
+		} else if len(processes) > 0 {
+			if !quitRunning {
+				blocked := apperr.New(
+					apperr.KindRunning,
+					"install.running",
+					fmt.Sprintf("应用「%s」正在运行（%d 个进程），需要先退出才能更新", app.Name, len(processes)),
+					nil,
+				)
+				s.fail(appKey, opID, blocked)
+				return store.Installed{}, blocked
+			}
+			err := install.QuitProcesses(processes, install.QuitOptions{
+				Grace: install.QuitGrace,
+				Report: func(message string) {
+					s.host.emit(appKey, opID, "quitting", -1, message, false)
+				},
+			})
+			if err != nil {
+				s.fail(appKey, opID, err)
+				return store.Installed{}, err
+			}
 		}
 	}
 
@@ -185,6 +224,18 @@ func (s *InstallService) Install(ctx context.Context, appKey string, artifactID 
 	return item, nil
 }
 
+// selfAppKey 是启动器自身；它走自更新 helper，不参与「运行中应用」检测。
+const selfAppKey = "vakaohub"
+
+// detectRunning 只在安装普通应用时检查目标目录；自更新路径必须完全绕过，
+// 否则会误判启动器自己正在运行而拦截 helper 流程。
+func (s *InstallService) detectRunning(appKey, target string) ([]install.RunningProcess, error) {
+	if appKey == selfAppKey {
+		return nil, nil
+	}
+	return install.RunningProcesses(target)
+}
+
 // fail 统一把错误写日志并推送给前端：日志保留系统原话，UI 只拿中文文案。
 func (s *InstallService) fail(appKey, opID string, err error) {
 	slog.Error(
@@ -204,7 +255,7 @@ func (s *InstallService) Uninstall(appKey string, deleteData bool) error {
 	}
 	defer release()
 
-	if appKey == "vakaohub" {
+	if appKey == selfAppKey {
 		return apperr.New(apperr.KindInternal, "uninstall", "不能卸载正在运行的启动器", nil)
 	}
 

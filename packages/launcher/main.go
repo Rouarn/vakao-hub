@@ -46,10 +46,10 @@ func main() {
 	})
 
 	host := service.NewHost(app)
-	app.RegisterService(application.NewService(service.NewCatalog(host)))
-	app.RegisterService(application.NewService(service.NewInstall(host)))
-	app.RegisterService(application.NewService(service.NewSettings(host)))
-	app.RegisterService(application.NewService(service.NewLauncher(host)))
+	app.RegisterService(bindService(service.NewCatalog(host)))
+	app.RegisterService(bindService(service.NewInstall(host)))
+	app.RegisterService(bindService(service.NewSettings(host)))
+	app.RegisterService(bindService(service.NewLauncher(host)))
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "VaKao Hub",
@@ -68,4 +68,11 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// bindService 把服务统一注册为 apperr 线格式。
+// Wails v3 的 application.Options.MarshalError 不会应用到 RegisterService 注册的服务，
+// 必须在每个服务自己的选项上设置，否则返回给前端的是 Go 结构体默认字段名（PascalCase）。
+func bindService[T any](instance *T) application.Service {
+	return application.NewServiceWithOptions(instance, application.ServiceOptions{MarshalError: apperr.Marshal})
 }

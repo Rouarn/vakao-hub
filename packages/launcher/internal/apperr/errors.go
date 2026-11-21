@@ -19,6 +19,7 @@ const (
 	KindTimeout     Kind = "timeout"
 	KindCanceled    Kind = "canceled"
 	KindBusy        Kind = "busy"
+	KindRunning     Kind = "running"
 	KindPermission  Kind = "permission"
 	KindDisk        Kind = "disk"
 	KindCorrupt     Kind = "corrupt"

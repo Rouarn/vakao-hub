@@ -39,7 +39,7 @@
             <div class="detail-actions">
               <button
                 class="action"
-                :disabled="busy || !supportsOs || (selected.running && (!isSelf(selected) || !selected.hasUpdate))"
+                :disabled="busy || !supportsOs || (selected.running && !selected.hasUpdate)"
                 @click="$emit('primary-action', selected)"
               >
                 <template v-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
@@ -186,16 +186,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { SELF_APP_KEY } from '../lib/constants';
 import type { AppView } from '../../bindings/vakaohub/launcher/internal/service';
 import type { DetailMeta } from '../lib/meta';
 import { appColor, releaseUrl } from '../lib/theme';
 import { formatBytes, formatDate, initial } from '../lib/format';
-
-// 启动器自身允许在运行中更新，其它运行中的应用不能覆盖安装。
-function isSelf(app: AppView): boolean {
-  return app.appKey === SELF_APP_KEY;
-}
 
 const props = defineProps<{
   selected: AppView;

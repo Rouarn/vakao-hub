@@ -11,6 +11,8 @@ func kindMessage(kind Kind) string {
 		return "已取消"
 	case KindBusy:
 		return "应用正在运行，请退出后重试"
+	case KindRunning:
+		return "应用正在运行，需要先退出才能继续"
 	case KindPermission:
 		return "没有写入权限，请在设置中更换安装目录"
 	case KindDisk:
@@ -39,6 +41,8 @@ func kindCode(kind Kind) string {
 		return "E_CANCELED"
 	case KindBusy:
 		return "E_BUSY"
+	case KindRunning:
+		return "E_RUNNING"
 	case KindPermission:
 		return "E_PERMISSION"
 	case KindDisk:
