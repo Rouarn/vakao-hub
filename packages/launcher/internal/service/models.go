@@ -51,3 +51,10 @@ type CatalogView struct {
 	OSVersion string    `json:"osVersion"`
 	Apps      []AppView `json:"apps"`
 }
+
+// UpdateNotice 是上一次自更新的结果，启动时提示一次后删除。
+type UpdateNotice struct {
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	UpdatedAt int64  `json:"updatedAt"`
+}

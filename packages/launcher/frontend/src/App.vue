@@ -20,6 +20,10 @@
         <span>正在安装 {{ activeInstall.name }}，可随时取消</span>
         <button @click="cancelInstall">取消安装</button>
       </div>
+      <div v-if="updateNotice" class="update-notice">
+        <span>{{ updateNotice.message }}</span>
+        <button @click="updateNotice = null">知道了</button>
+      </div>
       <div v-if="errorInfo && errorInfo.kind !== 'canceled'" class="banner">
         <span>{{ errorInfo.message }}</span>
         <button v-if="canRetry" @click="retryLast">重试</button>
@@ -133,7 +137,7 @@ import {
   LauncherService,
   SettingsService,
 } from '../bindings/vakaohub/launcher/internal/service';
-import type { AppView, Progress, Settings } from '../bindings/vakaohub/launcher/internal/service';
+import type { AppView, Progress, Settings, UpdateNotice } from '../bindings/vakaohub/launcher/internal/service';
 import { InstallProgress } from '../bindings/events';
 import { SELF_APP_KEY } from './lib/constants';
 import type { UserError } from './lib/errors';
@@ -154,6 +158,7 @@ const apps = ref<AppView[]>([]);
 const platform = ref('');
 const arch = ref('');
 const launcherVersion = ref('dev');
+const updateNotice = ref<UpdateNotice | null>(null);
 
 function initialRefreshMinutes(): number {
   try {
@@ -617,8 +622,18 @@ function restartRefreshTimer(): void {
   );
 }
 
+// 上次自更新的结果只提示一次：读取后主进程会删除结果文件。
+async function loadUpdateNotice(): Promise<void> {
+  try {
+    updateNotice.value = await LauncherService.ConsumeUpdateNotice();
+  } catch {
+    // 开发模式（浏览器）没有 Wails 运行时，忽略即可。
+  }
+}
+
 onMounted(() => {
   void load();
+  void loadUpdateNotice();
   window.addEventListener('click', closeMenu);
   window.addEventListener('keydown', onKeydown);
   offProgress = Events.On(InstallProgress, (event) => onProgress(event.data as Progress));

@@ -441,6 +441,29 @@ button {
   font-size: 10px;
 }
 
+.update-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(74, 148, 90, 0.3);
+  border-radius: 4px;
+  background: rgba(74, 148, 90, 0.08);
+  color: #396f47;
+  font-size: 11px;
+}
+
+.update-notice button {
+  border: 1px solid rgba(74, 148, 90, 0.32);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
 .app-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1857,6 +1880,12 @@ button {
   border-color: rgba(95, 190, 220, 0.26);
   background: rgba(95, 190, 220, 0.1);
   color: #a8dced;
+}
+
+[data-theme='dark'] .update-notice {
+  border-color: rgba(120, 196, 138, 0.26);
+  background: rgba(120, 196, 138, 0.1);
+  color: #a6dcb3;
 }
 
 [data-theme='dark'] .notice,

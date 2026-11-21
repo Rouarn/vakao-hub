@@ -6,6 +6,7 @@ import (
 	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/install"
 	"vakaohub/launcher/internal/logging"
+	"vakaohub/launcher/internal/updater"
 	launcherversion "vakaohub/launcher/internal/version"
 )
 
@@ -44,7 +45,32 @@ func (s *LauncherService) OpenLog() error {
 	return nil
 }
 
-// Quit 由前端在自更新后调用：退出进程让后台脚本完成 bundle 替换并重新打开新版本。
+// ConsumeUpdateNotice 返回上次自更新的结果并删除文件，保证同一次更新只提示一次。
+func (s *LauncherService) ConsumeUpdateNotice() *UpdateNotice {
+	path, err := updater.ResultPath()
+	if err != nil {
+		return nil
+	}
+	result, err := updater.ReadResult(path)
+	if err != nil {
+		// 没有结果文件说明最近没有发生过自更新；损坏的结果也直接丢弃。
+		if !os.IsNotExist(err) {
+			_ = os.Remove(path)
+		}
+		return nil
+	}
+	_ = os.Remove(path)
+	if result.Message == "" {
+		return nil
+	}
+	return &UpdateNotice{
+		Status:    result.Status,
+		Message:   result.Message,
+		UpdatedAt: result.UpdatedAt,
+	}
+}
+
+// Quit 由前端在自更新后调用：退出进程让 helper 完成 bundle 替换并重新打开新版本。
 func (s *LauncherService) Quit() {
 	if s.host.app == nil {
 		return

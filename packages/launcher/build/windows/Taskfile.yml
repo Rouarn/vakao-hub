@@ -32,6 +32,14 @@ tasks:
       - task: generate:syso
         vars:
           ARCH: '{{.ARCH}}'
+      - cmd: powershell New-Item -ItemType Directory -Force -Path "internal/selfupdate/bin/$($env:GOOS)_$($env:GOARCH)" | Out-Null
+        platforms: [windows]
+      - cmd: mkdir -p "internal/selfupdate/bin/${GOOS}_${GOARCH}"
+        platforms: [linux, darwin]
+      - cmd: go build -trimpath -buildvcs=false -ldflags="-w -s" -o "internal/selfupdate/bin/%GOOS%_%GOARCH%/vakaohub-updater.exe" ./cmd/updater
+        platforms: [windows]
+      - cmd: go build -trimpath -buildvcs=false -ldflags="-w -s" -o "internal/selfupdate/bin/${GOOS}_${GOARCH}/vakaohub-updater" ./cmd/updater
+        platforms: [linux, darwin]
       - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"
       - cmd: powershell Remove-item *.syso
         platforms: [windows]

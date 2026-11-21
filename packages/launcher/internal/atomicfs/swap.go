@@ -40,14 +40,21 @@ func StageDirFor(target string) (string, error) {
 	return stage, nil
 }
 
-// Swap 把 staged 换入 target：
-// 1. target 存在则先 rename 到同级备份；
-// 2. staged rename 到 target；
-// 3. 失败则把备份 rename 回 target；
-// 4. 成功返回 rollback，用于后续校验/拉起失败时回滚。
-//
-// 成功路径的备份由调用方在最终确认后通过 CleanupBackups 清理。
+// Swap 把 staged 换入 target，备份名自动生成。
 func Swap(staged, target string) (func() error, error) {
+	targetPath, err := filepath.Abs(target)
+	if err != nil {
+		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "安装路径无效", err)
+	}
+	backup := filepath.Join(
+		filepath.Dir(targetPath),
+		"."+filepath.Base(targetPath)+oldMarker+randomID(),
+	)
+	return SwapWithBackup(staged, target, backup)
+}
+
+// SwapWithBackup 使用调用方指定的备份路径完成原子换入，便于 helper 在 job 中固定备份位置。
+func SwapWithBackup(staged, target, backup string) (func() error, error) {
 	if strings.TrimSpace(staged) == "" || strings.TrimSpace(target) == "" {
 		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "暂存路径或安装路径为空", nil)
 	}
@@ -58,6 +65,19 @@ func Swap(staged, target string) (func() error, error) {
 	targetPath, err := filepath.Abs(target)
 	if err != nil {
 		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "安装路径无效", err)
+	}
+	if strings.TrimSpace(backup) == "" {
+		backup = filepath.Join(
+			filepath.Dir(targetPath),
+			"."+filepath.Base(targetPath)+oldMarker+randomID(),
+		)
+	}
+	backupPath, err := filepath.Abs(backup)
+	if err != nil {
+		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "备份路径无效", err)
+	}
+	if backupPath == targetPath || backupPath == stagedPath {
+		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "备份路径不能与安装路径相同", nil)
 	}
 
 	same, err := sameVolume(filepath.Dir(stagedPath), filepath.Dir(targetPath))
@@ -80,10 +100,11 @@ func Swap(staged, target string) (func() error, error) {
 		return nil, apperr.FromOS(statErr, "atomicfs.swap")
 	}
 
-	parent := filepath.Dir(targetPath)
-	backup := filepath.Join(parent, "."+filepath.Base(targetPath)+oldMarker+randomID())
 	if targetExists {
-		if err := os.Rename(targetPath, backup); err != nil {
+		if err := os.MkdirAll(filepath.Dir(backupPath), 0o755); err != nil {
+			return nil, apperr.FromOS(err, "atomicfs.swap")
+		}
+		if err := os.Rename(targetPath, backupPath); err != nil {
 			return nil, swapError(err)
 		}
 	}
@@ -91,7 +112,7 @@ func Swap(staged, target string) (func() error, error) {
 	if err := os.Rename(stagedPath, targetPath); err != nil {
 		var restoreErr error
 		if targetExists {
-			restoreErr = os.Rename(backup, targetPath)
+			restoreErr = os.Rename(backupPath, targetPath)
 		}
 		if restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("恢复旧版本失败: %w", restoreErr))
@@ -106,7 +127,7 @@ func Swap(staged, target string) (func() error, error) {
 		if !targetExists {
 			return nil
 		}
-		return os.Rename(backup, targetPath)
+		return os.Rename(backupPath, targetPath)
 	}
 	return rollback, nil
 }

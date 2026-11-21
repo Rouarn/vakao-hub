@@ -1,4 +1,7 @@
 bin/
+!internal/selfupdate/bin/
+internal/selfupdate/bin/*
+!internal/selfupdate/bin/.gitkeep
 node_modules
 frontend/dist
 frontend/bindings/
