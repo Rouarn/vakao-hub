@@ -38,7 +38,7 @@ func FindApps(name string) []Detected {
 	found := make([]Detected, 0, 2)
 
 	for _, entry := range entries {
-		if normalizeName(entry.DisplayName) != target {
+		if !nameMatches(entry.DisplayName, target) {
 			continue
 		}
 		path := resolveLaunchPath(entry, fileExists, findFirstExecutable)
@@ -50,6 +50,26 @@ func FindApps(name string) []Detected {
 
 	sort.Slice(found, func(i, j int) bool { return found[i].Path < found[j].Path })
 	return found
+}
+
+// uninstallCommand 返回注册表里登记的卸载命令与工作目录。
+// 优先 UninstallString（交互式，用户能看到进度），没有时才退回 QuietUninstallString。
+func uninstallCommand(name string) (string, string, bool) {
+	target := normalizeName(name)
+	for _, entry := range uninstallCache.get(queryUninstallRegistry) {
+		if !nameMatches(entry.DisplayName, target) {
+			continue
+		}
+		command := strings.TrimSpace(entry.UninstallString)
+		if command == "" {
+			command = strings.TrimSpace(entry.QuietUninstallString)
+		}
+		if command == "" {
+			continue
+		}
+		return command, cleanExecutablePath(entry.InstallLocation), true
+	}
+	return "", "", false
 }
 
 // InvalidateIndex 在安装/卸载后调用，下一次 FindApps 重新读取注册表。
@@ -99,10 +119,12 @@ func queryUninstallRegistry() []registryEntry {
 // 因此匹配结果与旧实现一致。
 func readUninstallEntry(key registry.Key) registryEntry {
 	return registryEntry{
-		DisplayName:     registryString(key, "DisplayName"),
-		DisplayVersion:  registryString(key, "DisplayVersion"),
-		InstallLocation: registryString(key, "InstallLocation"),
-		DisplayIcon:     registryString(key, "DisplayIcon"),
+		DisplayName:          registryString(key, "DisplayName"),
+		DisplayVersion:       registryString(key, "DisplayVersion"),
+		InstallLocation:      registryString(key, "InstallLocation"),
+		DisplayIcon:          registryString(key, "DisplayIcon"),
+		UninstallString:      registryString(key, "UninstallString"),
+		QuietUninstallString: registryString(key, "QuietUninstallString"),
 	}
 }
 

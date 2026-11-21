@@ -55,7 +55,7 @@ func TestExtractAppCorruptZip(t *testing.T) {
 }
 
 func TestInstallUnsupportedFormat(t *testing.T) {
-	_, err := Install(context.Background(), contract.FormatAPK, "app.apk", "demo", "Demo", "", "")
+	_, err := Install(context.Background(), Options{Format: contract.FormatAPK, FilePath: "app.apk", AppKey: "demo", AppName: "Demo"})
 	if apperr.KindOf(err) != apperr.KindUnsupported {
 		t.Fatalf("不支持格式 Kind = %s，期望 unsupported（%v）", apperr.KindOf(err), err)
 	}
@@ -69,10 +69,13 @@ func TestAtomicInstallFresh(t *testing.T) {
 	}
 
 	archive := makeZip(t, root, "1.1.0")
-	installed, err := Install(context.Background(), contract.FormatZIP, archive, "demo", "Demo", "", installDir)
+	result, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "demo", AppName: "Demo", InstallDir: installDir,
+	})
 	if err != nil {
 		t.Fatalf("原子安装失败：%v", err)
 	}
+	installed := result.Path
 	if installed != filepath.Join(installDir, "Demo.app") {
 		t.Fatalf("安装路径 = %s", installed)
 	}
@@ -90,10 +93,13 @@ func TestAtomicInstallUpgradesExisting(t *testing.T) {
 	signBundle(t, oldApp)
 
 	archive := makeZip(t, root, "1.1.0")
-	installed, err := Install(context.Background(), contract.FormatZIP, archive, "demo", "Demo", oldApp, installDir)
+	result, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "demo", AppName: "Demo", TargetPath: oldApp, InstallDir: installDir,
+	})
 	if err != nil {
 		t.Fatalf("升级安装失败：%v", err)
 	}
+	installed := result.Path
 	if installed != oldApp {
 		t.Fatalf("升级后路径 = %s，期望 %s", installed, oldApp)
 	}
@@ -117,7 +123,9 @@ func TestInstallSwapFailureKeepsOldApp(t *testing.T) {
 	}
 	t.Cleanup(func() { swapDirectory = original })
 
-	_, err := Install(context.Background(), contract.FormatZIP, archive, "demo", "Demo", oldApp, installDir)
+	_, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "demo", AppName: "Demo", TargetPath: oldApp, InstallDir: installDir,
+	})
 	if err == nil {
 		t.Fatal("swap 注入失败时应返回错误")
 	}
@@ -138,7 +146,9 @@ func TestInstallCorruptZipKeepsOldApp(t *testing.T) {
 		t.Fatalf("写入坏包失败：%v", err)
 	}
 
-	_, err := Install(context.Background(), contract.FormatZIP, archive, "demo", "Demo", oldApp, installDir)
+	_, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "demo", AppName: "Demo", TargetPath: oldApp, InstallDir: installDir,
+	})
 	if apperr.KindOf(err) != apperr.KindCorrupt {
 		t.Fatalf("坏包 Kind = %s，期望 corrupt（%v）", apperr.KindOf(err), err)
 	}
@@ -163,7 +173,9 @@ func TestInstallReadOnlyParentKeepsOldApp(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(installDir, 0o755) })
 
-	_, err := Install(context.Background(), contract.FormatZIP, archive, "demo", "Demo", oldApp, installDir)
+	_, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "demo", AppName: "Demo", TargetPath: oldApp, InstallDir: installDir,
+	})
 	if apperr.KindOf(err) != apperr.KindPermission {
 		t.Fatalf("只读父目录 Kind = %s，期望 permission（%v）", apperr.KindOf(err), err)
 	}

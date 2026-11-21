@@ -42,7 +42,11 @@ type AppView struct {
 	HasUpdate            bool          `json:"hasUpdate"`
 	Running              bool          `json:"running"`
 	InstallPath          string        `json:"installPath"`
-	Duplicates           []string      `json:"duplicates"`
+	// InstallKind 区分便携复制与自带安装器；InstallPathKnown 为 false 时界面显示「由安装程序管理」。
+	InstallKind      string   `json:"installKind,omitempty"`
+	InstallPathKnown bool     `json:"installPathKnown"`
+	InstallPending   bool     `json:"installPending"`
+	Duplicates       []string `json:"duplicates"`
 }
 
 type CatalogView struct {

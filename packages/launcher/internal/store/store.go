@@ -14,6 +14,11 @@ type Installed struct {
 	VersionCode int    `json:"versionCode"`
 	InstallPath string `json:"installPath"`
 	InstalledAt int64  `json:"installedAt"`
+	// Kind 区分托管复制（portable）与自带安装器（installer）。
+	// 旧记录没有该字段时按 portable 处理。
+	Kind string `json:"kind,omitempty"`
+	// Pending 表示安装器已启动、位置还没从卸载注册表确认。
+	Pending bool `json:"pending,omitempty"`
 }
 
 type Store struct {

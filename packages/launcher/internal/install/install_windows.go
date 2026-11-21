@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,47 +22,60 @@ import (
 
 const installerTimeout = 30 * time.Minute
 
-func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
-	switch format {
+func installLocal(ctx context.Context, opts Options) (Result, error) {
+	switch opts.Format {
 	case contract.FormatZIP:
-		return installZip(ctx, filePath, appKey, targetPath, installDir)
+		return installZip(ctx, opts)
 	case contract.FormatMSI:
 		if err := ctx.Err(); err != nil {
-			return "", apperr.FromContext(err, "install.msi")
+			return Result{}, apperr.FromContext(err, "install.msi")
 		}
-		command := exec.Command("msiexec", "/i", filePath, "/qn", "/norestart")
+		command := exec.Command("msiexec", "/i", opts.FilePath, "/qn", "/norestart")
 		if err := runSystemInstaller(ctx, command, installerTimeout); err != nil {
-			return "", err
+			return Result{}, err
 		}
 		// MSI 的安装位置由安装包决定，只能从卸载注册表反查；
 		// 先失效索引再查，确保刚写入的注册表项可见。
 		InvalidateIndex()
-		if detected := FindApps(appName); len(detected) > 0 {
-			return detected[0].Path, nil
+		if detected := FindApps(opts.AppName); len(detected) > 0 {
+			return Result{Path: detected[0].Path, Kind: KindInstaller}, nil
 		}
-		return "", nil
+		// 注册表暂时查不到也要留下「已安装待确认」的记录，不能假装没装。
+		return Result{Kind: KindInstaller, Pending: true}, nil
 	case contract.FormatEXE:
 		if err := ctx.Err(); err != nil {
-			return "", apperr.FromContext(err, "install.exe")
+			return Result{}, apperr.FromContext(err, "install.exe")
 		}
-		// 单文件便携应用没有安装器可调起，复制进托管目录并记录安装结果；
-		// 安装器（NSIS/Inno 等）仍按原来的方式交给系统向导。
-		if !isInstallerEXE(filePath) {
-			return installPortableEXE(ctx, filePath, appKey, targetPath, installDir)
+		mode := opts.Mode
+		if mode == "" {
+			classification := Classify(contract.FormatEXE, opts.FilePath)
+			if classification.Confidence == ConfidenceUncertain {
+				// 正常流程里 service 会先分类并让用户选择；到这里说明调用方漏了，
+				// 按安装器处理最保守：不把未知文件复制进托管目录。
+				mode = ModeInstaller
+			} else if classification.Kind == KindInstaller {
+				mode = ModeInstaller
+			} else {
+				mode = ModePortable
+			}
 		}
-		command := exec.Command("cmd", "/c", "start", "", filePath)
+		if mode == ModePortable {
+			path, err := installPortableEXE(ctx, opts.FilePath, opts.AppKey, opts.TargetPath, opts.InstallDir)
+			return Result{Path: path, Kind: KindPortable}, err
+		}
+		command := exec.Command("cmd", "/c", "start", "", opts.FilePath)
 		// 安装器/便携程序通常按自身目录查找资源，不能继承启动器的工作目录。
-		command.Dir = filepath.Dir(filePath)
+		command.Dir = filepath.Dir(opts.FilePath)
 		// exe 启动后由系统安装程序接管，不能再取消。
 		if err := command.Start(); err != nil {
-			return "", apperr.New(apperr.KindInternal, "install.exe", "启动安装程序失败，请手动安装", err)
+			return Result{}, apperr.New(apperr.KindInternal, "install.exe", "启动安装程序失败，请手动安装", err)
 		}
-		return "", nil
+		return Result{Kind: KindInstaller, Pending: true}, nil
 	default:
-		return "", apperr.New(
+		return Result{}, apperr.New(
 			apperr.KindUnsupported,
 			"install.format",
-			fmt.Sprintf("Windows 暂不支持 %s 格式", format),
+			fmt.Sprintf("Windows 暂不支持 %s 格式", opts.Format),
 			nil,
 		)
 	}
@@ -113,83 +125,51 @@ func runSystemInstaller(ctx context.Context, command *exec.Cmd, timeout time.Dur
 	}
 }
 
-func installZip(ctx context.Context, filePath, appKey, targetPath, installDir string) (string, error) {
-	target := resolveContainer(appKey, targetPath, installDir)
+// installZip 解压后对主程序再分类：zip 里只有一个 setup.exe 的分发方式
+// 不能被当成便携应用塞进托管目录，必须交给它自己的安装器。
+func installZip(ctx context.Context, opts Options) (Result, error) {
+	target := resolveContainer(opts.AppKey, opts.TargetPath, opts.InstallDir)
 	if target == "" {
-		return "", apperr.New(apperr.KindInternal, "install.zip", "无法确定应用安装目录，请检查用户配置目录", nil)
+		return Result{}, apperr.New(apperr.KindInternal, "install.zip", "无法确定应用安装目录，请检查用户配置目录", nil)
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return "", apperr.FromOS(err, "install.zip")
+		return Result{}, apperr.FromOS(err, "install.zip")
 	}
 
 	stage, err := atomicfs.StageDirFor(target)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	defer os.RemoveAll(stage)
 
-	if err := extractZipTo(ctx, filePath, stage); err != nil {
-		return "", err
+	if err := extractZipTo(ctx, opts.FilePath, stage); err != nil {
+		return Result{}, err
 	}
 
 	stageExe := findExecutable(stage)
 	if stageExe == "" {
-		return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包内未找到可执行文件（.exe），无法完成安装", nil)
+		return Result{}, apperr.New(apperr.KindCorrupt, "install.zip", "安装包内未找到可执行文件（.exe），无法完成安装", nil)
 	}
 	relative, err := filepath.Rel(stage, stageExe)
 	if err != nil {
-		return "", apperr.New(apperr.KindInternal, "install.zip", "安装包路径异常，请重试", err)
+		return Result{}, apperr.New(apperr.KindInternal, "install.zip", "安装包路径异常，请重试", err)
+	}
+
+	// 用户显式选择安装器，或主程序本身就是安装器：在当前暂存目录运行并等待结束。
+	// 这里必须等待，否则暂存目录被清理后安装器会读不到自己的文件。
+	if opts.Mode == ModeInstaller || (opts.Mode == ModeAuto && Classify(contract.FormatEXE, stageExe).Kind == KindInstaller) {
+		command := exec.Command("cmd", "/c", "start", "/wait", "", stageExe)
+		command.Dir = filepath.Dir(stageExe)
+		if err := runSystemInstaller(ctx, command, installerTimeout); err != nil {
+			return Result{}, err
+		}
+		return Result{Kind: KindInstaller, Pending: true}, nil
 	}
 
 	if err := commitStage(stage, target); err != nil {
-		return "", err
+		return Result{}, err
 	}
-	return filepath.Join(target, relative), nil
-}
-
-// installerMarkers 常见 Windows 安装器写在文件里的签名。
-// NSIS（electron-builder / Tauri 的默认安装器）含 NullsoftInst。
-var installerMarkers = [][]byte{
-	[]byte("NullsoftInst"),
-	[]byte("Inno Setup"),
-	[]byte("WixBundle"),
-	[]byte("InstallShield"),
-	[]byte("Squirrel"),
-}
-
-// isInstallerEXE 判断 exe 是安装向导还是单文件便携应用。
-// 读不到文件时按安装器处理，让后续 Start 返回可诊断的错误而不是误复制。
-func isInstallerEXE(path string) bool {
-	file, err := os.Open(path)
-	if err != nil {
-		return true
-	}
-	defer file.Close()
-
-	const window = 4 << 20
-	buffer := make([]byte, window)
-	n, err := io.ReadFull(file, buffer)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
-		return true
-	}
-	buffer = buffer[:n]
-	for _, marker := range installerMarkers {
-		if bytes.Contains(buffer, marker) {
-			return true
-		}
-	}
-	// 部分安装器把签名放在文件尾部 overlay，补查一次尾部。
-	if info, statErr := file.Stat(); statErr == nil && info.Size() > window {
-		tail := make([]byte, window)
-		if _, readErr := file.ReadAt(tail, info.Size()-int64(window)); readErr == nil {
-			for _, marker := range installerMarkers {
-				if bytes.Contains(tail, marker) {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return Result{Path: filepath.Join(target, relative), Kind: KindPortable}, nil
 }
 
 // installPortableEXE 把没有安装器的单文件应用复制进托管目录，
@@ -253,6 +233,28 @@ func findExecutable(root string) string {
 		return nil
 	})
 	return found
+}
+
+// UninstallInstaller 调起注册表里登记的卸载程序（交互式，会弹 UAC/向导）。
+// 卸载完成后记录仍会短暂保留为 pending，由 catalog 在注册表项消失后清理。
+func UninstallInstaller(name string) error {
+	commandText, dir, ok := uninstallCommand(name)
+	if !ok {
+		return apperr.New(
+			apperr.KindUnsupported,
+			"uninstall",
+			"该应用没有提供卸载命令，请在 Windows「设置 → 应用」中卸载",
+			nil,
+		)
+	}
+	command := exec.Command("cmd", "/c", commandText)
+	if dir != "" {
+		command.Dir = dir
+	}
+	if err := command.Start(); err != nil {
+		return apperr.New(apperr.KindInternal, "uninstall", "启动系统卸载程序失败，请在「设置 → 应用」中卸载", err)
+	}
+	return nil
 }
 
 // CleanupStale 清理 7 天前的暂存与备份残留。

@@ -10,11 +10,27 @@ import (
 // swapDirectory 是原子换入的注入点，测试可替换为失败实现验证旧版本不被破坏。
 var swapDirectory = atomicfs.Swap
 
-// Install 按产物格式执行平台安装，返回可启动路径（可能为空）。
-// installDir 是用户配置的安装目录，空串表示使用平台默认目录；
-// targetPath 非空表示升级已有安装，保持原位置。
-func Install(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
-	return installLocal(ctx, format, filePath, appKey, appName, targetPath, installDir)
+// Options 是一次安装所需的全部输入。
+type Options struct {
+	Format     string
+	FilePath   string
+	AppKey     string
+	AppName    string
+	TargetPath string // 非空表示升级已有安装，尽量保持原位置
+	InstallDir string // 用户配置的安装根目录，空串表示平台默认
+	Mode       string // 空串自动判断；uncertain 时由用户在便携/安装器之间选择
+}
+
+// Result 是安装结果：Path 为空表示安装器已启动、位置由它自己决定。
+type Result struct {
+	Path    string
+	Kind    Kind
+	Pending bool
+}
+
+// Install 按产物格式执行平台安装。
+func Install(ctx context.Context, opts Options) (Result, error) {
+	return installLocal(ctx, opts)
 }
 
 // Remove 删除已安装应用（仅允许平台约定的安装目录）。

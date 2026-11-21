@@ -16,17 +16,19 @@ import (
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
-	switch format {
+func installLocal(ctx context.Context, opts Options) (Result, error) {
+	switch opts.Format {
 	case contract.FormatZIP:
-		return installZip(ctx, filePath, appKey)
+		path, err := installZip(ctx, opts.FilePath, opts.AppKey)
+		return Result{Path: path, Kind: KindPortable}, err
 	case contract.FormatAppImage:
-		return installAppImage(ctx, filePath, installDir)
+		path, err := installAppImage(ctx, opts.FilePath, opts.InstallDir)
+		return Result{Path: path, Kind: KindPortable}, err
 	default:
-		return "", apperr.New(
+		return Result{}, apperr.New(
 			apperr.KindUnsupported,
 			"install.format",
-			fmt.Sprintf("Linux 暂不支持 %s 格式，请上传 zip 或 appimage", format),
+			fmt.Sprintf("Linux 暂不支持 %s 格式，请上传 zip 或 appimage", opts.Format),
 			nil,
 		)
 	}

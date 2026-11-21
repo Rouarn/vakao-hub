@@ -25,6 +25,8 @@ func kindMessage(kind Kind) string {
 		return "该格式不支持自动安装，请手动安装"
 	case KindServer:
 		return "服务暂时不可用，请稍后重试"
+	case KindChoice:
+		return "需要确认安装方式"
 	default:
 		return "发生内部错误，请查看日志"
 	}
@@ -55,6 +57,8 @@ func kindCode(kind Kind) string {
 		return "E_UNSUPPORTED"
 	case KindServer:
 		return "E_SERVER"
+	case KindChoice:
+		return "E_CHOICE"
 	default:
 		return "E_INTERNAL"
 	}

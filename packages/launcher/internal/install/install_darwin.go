@@ -18,12 +18,13 @@ import (
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
-	switch format {
+func installLocal(ctx context.Context, opts Options) (Result, error) {
+	switch opts.Format {
 	case contract.FormatDMG, contract.FormatZIP:
-		return installBundle(ctx, format, filePath, targetPath, installDir)
+		path, err := installBundle(ctx, opts.Format, opts.FilePath, opts.TargetPath, opts.InstallDir)
+		return Result{Path: path, Kind: KindPortable}, err
 	default:
-		return "", apperr.New(
+		return Result{}, apperr.New(
 			apperr.KindUnsupported,
 			"install.format",
 			"该格式不支持自动安装，请上传 dmg 或 zip",

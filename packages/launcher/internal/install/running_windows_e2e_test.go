@@ -27,9 +27,9 @@ func TestWindowsBusyQuitThenInstall(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	appData := filepath.Join(root, "appdata")
-	t.Setenv("APPDATA", appData)
-	target := filepath.Join(appData, "VaKaoHub", "apps", "e2e")
+	localAppData := filepath.Join(root, "localappdata")
+	t.Setenv("LOCALAPPDATA", localAppData)
+	target := filepath.Join(localAppData, "Programs", "VaKaoHub", "e2e")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatalf("创建目标目录失败：%v", err)
 	}
@@ -88,7 +88,9 @@ func TestWindowsBusyQuitThenInstall(t *testing.T) {
 
 	archive := filepath.Join(root, "demo-1.1.0.zip")
 	writeArchive(t, archive, fixture)
-	if _, err := Install(context.Background(), contract.FormatZIP, archive, "e2e", "E2E Demo", "", ""); err != nil {
+	if _, err := Install(context.Background(), Options{
+		Format: contract.FormatZIP, FilePath: archive, AppKey: "e2e", AppName: "E2E Demo",
+	}); err != nil {
 		t.Fatalf("退出后继续安装失败：%v", err)
 	}
 

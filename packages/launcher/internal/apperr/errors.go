@@ -26,6 +26,7 @@ const (
 	KindSignature   Kind = "signature"
 	KindUnsupported Kind = "unsupported"
 	KindServer      Kind = "server"
+	KindChoice      Kind = "choice"
 	KindInternal    Kind = "internal"
 )
 

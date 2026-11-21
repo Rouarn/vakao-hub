@@ -18,6 +18,10 @@ type CatalogService struct {
 	host *Host
 }
 
+// installPendingWindow 是安装器启动后等待卸载注册表出现的时间窗口。
+// 超过仍未识别，视为用户取消了向导，清掉 pending 记录回到未安装。
+const installPendingWindow = 24 * time.Hour
+
 func NewCatalog(host *Host) *CatalogService {
 	return &CatalogService{host: host}
 }
@@ -94,6 +98,7 @@ func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error)
 			if path, version, ok := install.CurrentBundle(); ok {
 				item.Installed = true
 				item.Running = true
+				item.InstallKind = string(install.KindPortable)
 				item.InstallPath = path
 				installedPath = path
 				installedVersion = version
@@ -107,6 +112,7 @@ func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error)
 						VersionName: version,
 						InstallPath: path,
 						InstalledAt: time.Now().Unix(),
+						Kind:        string(install.KindPortable),
 					})
 				}
 			}
@@ -114,23 +120,51 @@ func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error)
 
 		if !item.Installed {
 			if record, ok := s.host.store.Get(app.AppKey); ok {
-				if _, statErr := os.Stat(record.InstallPath); statErr == nil {
-					item.Installed = true
-					item.InstallPath = record.InstallPath
-					installedPath = record.InstallPath
-					installedVersion = record.VersionName
-					installedCode = record.VersionCode
-				} else {
-					_ = s.host.store.Remove(app.AppKey)
+				switch record.Kind {
+				case string(install.KindInstaller):
+					// 安装器类的真相在卸载注册表：查到就补全路径；查不到但仍在等待窗口内，
+					// 显示「已安装 · 位置未知」而不是假装没装；超时仍未出现则视为取消了安装。
+					if len(detected) > 0 {
+						item.Installed = true
+						item.InstallPath = detected[0].Path
+						installedPath = detected[0].Path
+						installedVersion = detected[0].Version
+						item.InstallKind = string(install.KindInstaller)
+						if record.InstallPath != detected[0].Path ||
+							record.VersionName != detected[0].Version ||
+							record.Pending {
+							record.InstallPath = detected[0].Path
+							record.VersionName = detected[0].Version
+							record.Pending = false
+							_ = s.host.store.Put(record)
+						}
+					} else if record.Pending && time.Since(time.Unix(record.InstalledAt, 0)) < installPendingWindow {
+						item.InstallPending = true
+						item.InstallKind = string(install.KindInstaller)
+					} else {
+						_ = s.host.store.Remove(app.AppKey)
+					}
+				default:
+					if _, statErr := os.Stat(record.InstallPath); statErr == nil {
+						item.Installed = true
+						item.InstallPath = record.InstallPath
+						installedPath = record.InstallPath
+						installedVersion = record.VersionName
+						installedCode = record.VersionCode
+						item.InstallKind = string(install.KindPortable)
+					} else {
+						_ = s.host.store.Remove(app.AppKey)
+					}
 				}
 			}
 		}
 
-		if !item.Installed && len(detected) > 0 {
+		if !item.Installed && !item.InstallPending && len(detected) > 0 {
 			item.Installed = true
 			item.InstallPath = detected[0].Path
 			installedPath = detected[0].Path
 			installedVersion = detected[0].Version
+			item.InstallKind = string(install.KindInstaller)
 			_ = s.host.store.Put(store.Installed{
 				AppKey:      app.AppKey,
 				Name:        app.Name,
@@ -138,10 +172,12 @@ func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error)
 				VersionCode: 0,
 				InstallPath: detected[0].Path,
 				InstalledAt: time.Now().Unix(),
+				Kind:        string(install.KindInstaller),
 			})
 		}
 
 		if item.Installed {
+			item.InstallPathKnown = installedPath != ""
 			item.InstalledVersion = installedVersion
 			item.InstalledVersionCode = installedCode
 			if installedCode > 0 {
@@ -192,6 +228,21 @@ func (s *CatalogService) Launch(appKey string) error {
 	if !ok {
 		return apperr.New(apperr.KindInternal, "launch", "尚未安装该应用", nil)
 	}
+	if item.Kind == string(install.KindInstaller) && item.InstallPath == "" {
+		// 安装器类可能刚装完还没刷新，这里顺手再查一次注册表；仍找不到再给明确提示。
+		if found := install.FindApps(item.Name); len(found) > 0 {
+			item.InstallPath = found[0].Path
+			item.Pending = false
+			_ = s.host.store.Put(item)
+		} else if item.Pending {
+			return apperr.New(
+				apperr.KindInternal,
+				"launch",
+				"安装尚未完成，暂时无法启动；请先按安装向导完成安装后刷新",
+				nil,
+			)
+		}
+	}
 	if _, err := os.Stat(item.InstallPath); err != nil {
 		// 记录路径失效时先重新扫描并修正记录，避免用户挪动应用后永远打不开。
 		if found := install.FindApps(item.Name); len(found) > 0 {
@@ -238,6 +289,14 @@ func (s *CatalogService) Reveal(appKey string) error {
 		item, ok := s.host.store.Get(appKey)
 		if !ok {
 			return apperr.New(apperr.KindInternal, "reveal", "尚未安装该应用", nil)
+		}
+		if item.InstallPath == "" && item.Kind == string(install.KindInstaller) {
+			return apperr.New(
+				apperr.KindInternal,
+				"reveal",
+				"该应用由安装程序管理，暂时无法定位；可在详情中使用「手动指定程序位置」",
+				nil,
+			)
 		}
 		path = item.InstallPath
 	}
