@@ -115,7 +115,8 @@ func (s *InstallService) install(
 	// 分类不确定时会把已下载的产物保留下来；用户选择安装方式后从这里续上，不重复下载。
 	filePath := s.resumePending(appKey, artifact.ID)
 	if filePath != "" {
-		defer os.Remove(filePath)
+		// 保留产物放在专用子目录里，续装后连同目录一起清理。
+		defer os.RemoveAll(filepath.Dir(filePath))
 	} else {
 		s.host.onceEvent(eventKey+":download_start", withType(event, eventDownloadStart))
 
@@ -196,7 +197,7 @@ func (s *InstallService) install(
 	if artifact.Format == contract.FormatEXE && mode == install.ModeAuto {
 		classification := install.Classify(artifact.Format, filePath)
 		if classification.Confidence == install.ConfidenceUncertain {
-			preserved, preserveErr := preserveForChoice(artifact.ID, artifact.Format, filePath)
+			preserved, preserveErr := preserveForChoice(artifact.ID, filePath)
 			if preserveErr != nil {
 				typed := apperr.FromOS(preserveErr, "install.choice")
 				s.fail(appKey, opID, typed)
@@ -205,8 +206,8 @@ func (s *InstallService) install(
 			s.rememberPending(appKey, artifact.ID, artifact.Format, preserved)
 			target := install.PreviewTargetDir(app.AppKey, existingPath, s.host.installDir())
 			message := fmt.Sprintf(
-				"未识别到安装程序标记。将作为便携应用复制到 %s；如果它其实是安装程序，请选择「交给安装程序」。",
-				target,
+				"未能确定「%s」是便携应用还是安装程序。选「作为便携应用安装」会复制到 %s；如果它是安装程序，请选择「交给安装程序」。",
+				app.Name, target,
 			)
 			return store.Installed{}, apperr.New(apperr.KindChoice, "install.choice", message, nil)
 		}
@@ -316,12 +317,16 @@ const selfAppKey = "vakaohub"
 
 // preserveForChoice 把已下载的产物复制到临时待定目录：
 // 用户选择安装方式后继续安装，不必重新下载；系统临时目录由操作系统自行回收。
-func preserveForChoice(artifactID int, format, source string) (string, error) {
+func preserveForChoice(artifactID int, source string) (string, error) {
 	dir := filepath.Join(os.TempDir(), "vakaohub-pending")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	target := filepath.Join(dir, fmt.Sprintf("%d.%s", artifactID, format))
+	// 保留原始文件名：续装时直接复制这个文件，安装后的可执行文件名不能变成产物 ID。
+	target := filepath.Join(dir, fmt.Sprintf("%d", artifactID), filepath.Base(source))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return "", err
+	}
 
 	input, err := os.Open(source)
 	if err != nil {

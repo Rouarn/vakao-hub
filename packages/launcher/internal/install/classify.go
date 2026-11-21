@@ -36,15 +36,13 @@ const (
 	ModeInstaller = "installer"
 )
 
-// installerMarkers 是常见安装器写在文件里的签名。
+// installerMarkers 是安装器独有的强签名：只要出现，基本可以确定是安装向导。
 // 同时按 ASCII 与 UTF-16LE 匹配：PE 版本资源里的描述串是 UTF-16。
 var installerMarkers = []string{
 	"NullsoftInst",       // NSIS（electron-builder / Tauri 默认）
 	"Inno Setup",         // Inno Setup
 	"InnoSetupLdr",       // Inno Setup 引导器
 	"WixBundle",          // WiX Burn
-	"InstallShield",      // InstallShield
-	"Squirrel",           // Electron 自动更新安装器
 	";!@Install@!UTF-8!", // 7-Zip 自解压
 	"7zS.sfx",            // 7-Zip 自解压
 	"WinRAR SFX",         // WinRAR 自解压
@@ -52,6 +50,14 @@ var installerMarkers = []string{
 	"Setup Factory",      // Setup Factory
 	"InstallAware",       // InstallAware
 	"InstallAnywhere",    // InstallAnywhere
+}
+
+// weakInstallerMarkers 是容易被普通应用误带的字符串：
+// 例如 Wails/Electron 应用内嵌的资源里也可能出现 InstallShield、Squirrel。
+// 只在没有便携框架标记时才作为「疑似安装器」处理，并让用户二次确认。
+var weakInstallerMarkers = []string{
+	"InstallShield",
+	"Squirrel",
 }
 
 // portableMarkers 是明确的便携/单文件框架标记。

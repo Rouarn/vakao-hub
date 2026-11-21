@@ -38,8 +38,14 @@ func classifyEXE(path string) Classification {
 	if name := installerSection(path); name != "" {
 		return Classification{Kind: KindInstaller, Confidence: ConfidenceCertain, Reason: "section:" + name}
 	}
+	// 便携框架标记优先于弱安装器字符串：真实产物 WireDeck.exe 内嵌资源里
+	// 带有 "InstallShield" 字样，但它本身是 Go/Wails 单文件应用。
 	if marker, ok := containsAnyMarker(data, portableMarkers); ok {
 		return Classification{Kind: KindPortable, Confidence: ConfidenceCertain, Reason: "marker:" + marker}
+	}
+	if marker, ok := containsAnyMarker(data, weakInstallerMarkers); ok {
+		// 可能是安装器，也可能是普通应用里的资源字符串；交给用户二选一。
+		return Classification{Kind: KindInstaller, Confidence: ConfidenceUncertain, Reason: "weak-marker:" + marker}
 	}
 	if looksLikeInstallerName(filepath.Base(path)) {
 		return Classification{Kind: KindInstaller, Confidence: ConfidenceCertain, Reason: "name-heuristic"}

@@ -101,7 +101,7 @@ func TestWindowsBusyQuitThenInstall(t *testing.T) {
 	if string(version) != "1.1.0" {
 		t.Fatalf("安装后版本标记 = %q", version)
 	}
-	assertNoBackups(t, filepath.Join(appData, "VaKaoHub", "apps"))
+	assertNoBackups(t, filepath.Join(localAppData, "Programs", "VaKaoHub"))
 }
 
 func writeArchive(t *testing.T, path, exe string) {

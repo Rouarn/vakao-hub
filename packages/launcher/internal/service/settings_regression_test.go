@@ -3,6 +3,7 @@ package service
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,10 +18,11 @@ func TestSaveSettingsCustomInstallDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析 HOME 失败：%v", err)
 	}
-	dir := filepath.Join(home, "Apps2")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dir, err := os.MkdirTemp(home, ".vakaohub-test-")
+	if err != nil {
 		t.Fatalf("创建目录失败：%v", err)
 	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	service := NewSettings(host)
 	settings, err := service.SaveSettings("http://127.0.0.1:18081/api/v1", dir)
@@ -36,7 +38,11 @@ func TestSaveSettingsCustomInstallDir(t *testing.T) {
 }
 
 // TestSaveSettingsRejectsReadOnlyDir 只读目录必须返回可读的中文错误，且不写入设置。
+// Windows 不使用 POSIX 权限位，chmod 造不出只读目录，这条只在类 Unix 上验证。
 func TestSaveSettingsRejectsReadOnlyDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不支持用 chmod 构造只读目录")
+	}
 	host := newTestHost(t, store.NewMemory())
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -63,7 +69,11 @@ func TestSaveSettingsRejectsReadOnlyDir(t *testing.T) {
 }
 
 // TestSaveSettingsRejectsOutsideHome 主目录与 /Applications 之外的路径必须被拒绝。
+// 这是 macOS 的目录白名单语义；Windows 允许任意固定盘，按自己的规则校验。
 func TestSaveSettingsRejectsOutsideHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 允许任意本机固定盘，不使用 macOS 的主目录白名单")
+	}
 	host := newTestHost(t, store.NewMemory())
 	service := NewSettings(host)
 
