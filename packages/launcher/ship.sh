@@ -1,11 +1,15 @@
 #!/bin/bash
-# 构建 VaKao 启动器 → macOS zip（默认）或 Windows exe（--win32）→ 上传并发布到软件中心。
+# 构建 VaKao 启动器 → macOS zip（默认）、Windows exe（--win32），或两端一起（--both）→ 上传并发布到软件中心。
 #
-# 用法: ship.sh [--win32] [--macos] [--no-build] [--dry-run] [--publish none|gray|full] [--gray-percent N]
-#   --win32        改出 Windows x64 裸 exe；不加则保持 macOS zip 行为
-#   --macos        默认平台，等价于不传；保留是为了脚本里显式声明平台
+# 用法: ship.sh [--win32 | --both] [--no-build] [--dry-run]
+#                [--publish none|gray|full] [--gray-percent N]
+#   --both         一次出两端：先各自构建并以草稿/下架状态上传（不发布），
+#                  两端都成功后再统一发布一次并复核两个平台；任一端失败都不发布，可直接重跑
+#                  （上传带 --replace，会替换同平台/架构/格式的旧产物）
+#   --win32        只出 Windows x64 裸 exe（单平台流程保持原语义：上传后立即发布）
+#   --macos        默认单平台，等价于不传；保留是为了脚本里显式声明平台
 #   --no-build     跳过编译，直接用 bin/ 下已有产物；产物版本或归档与当前 .app 不一致时会被门禁拒绝
-#   --dry-run      构建并执行全部门禁检查，只打印上传命令、不真正上传
+#   --dry-run      构建并执行全部门禁检查，只打印命令序列、不下载/下架/上传/发布
 #   --publish      发布模式，只接受 none / gray / full（默认 full）；拼写错误直接退非零
 #   --gray-percent 灰度百分比，仅在 --publish gray 时生效
 #
@@ -39,12 +43,18 @@ PRODUCT="$(node "$REPO/scripts/version.mjs" productName)"
 BUNDLE_ID="$(node "$REPO/scripts/version.mjs" productIdentifier)"
 
 PLATFORM="darwin"
+BOTH=0
 BUILD=1
 DRY_RUN=0
 PUBLISH="full"
 PASSTHRU=()
+GRAY_PERCENT=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --both)
+      BOTH=1
+      shift
+      ;;
     --win32)
       PLATFORM="win32"
       shift
@@ -88,6 +98,7 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       PASSTHRU+=(--gray-percent "$2")
+      GRAY_PERCENT="$2"
       shift 2
       ;;
     *)
@@ -96,6 +107,11 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$BOTH" = 1 ] && [ "$PLATFORM" = "win32" ]; then
+  echo "--both 不能与 --win32 同时使用" >&2
+  exit 2
+fi
 
 # 构建前先预检凭据，避免整轮编译跑完才报缺 token；dry-run 不上传，跳过。
 if [ "$DRY_RUN" = 0 ]; then
@@ -280,28 +296,7 @@ cleanup_old_zips() {
   done
 }
 
-if [ "$PLATFORM" = "win32" ]; then
-  EXE="$ROOT/bin/$PRODUCT.exe"
-  if [ "$BUILD" = 1 ]; then
-    command -v wails3 >/dev/null 2>&1 || {
-      echo "找不到 wails3（go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0）" >&2
-      exit 1
-    }
-    sync_build_assets
-    ( cd "$ROOT" && wails3 task windows:build APP_VERSION="$VERSION" ARCH=amd64 )
-  fi
-  [ -f "$EXE" ] || { echo "找不到产物 $EXE" >&2; exit 1; }
-
-  assert_cmd_equal "windows/info.json 版本" "$VERSION" \
-    env INFO_JSON="$ROOT/build/windows/info.json" \
-    node -p "require(process.env.INFO_JSON).info['0409'].ProductVersion"
-  check_pe_version "$EXE" "$VERSION"
-  check_package win32 exe "$EXE"
-
-  UPLOAD=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
-    --file "$EXE" --platform win32 --arch x64 --format exe --min-os 10.0 \
-    --notes "VaKao Hub $VERSION" ${PASSTHRU[@]+"${PASSTHRU[@]}"})
-else
+build_darwin() {
   APP="$ROOT/bin/$PRODUCT.app"
   BIN="$APP/Contents/MacOS/$PRODUCT"
   ZIP="/tmp/$PRODUCT-$VERSION.zip"
@@ -331,7 +326,102 @@ else
   fi
   check_archive "$ZIP" "$APP"
   check_package darwin zip "$ZIP"
+}
 
+build_win32() {
+  EXE="$ROOT/bin/$PRODUCT.exe"
+  if [ "$BUILD" = 1 ]; then
+    command -v wails3 >/dev/null 2>&1 || {
+      echo "找不到 wails3（go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0）" >&2
+      exit 1
+    }
+    sync_build_assets
+    ( cd "$ROOT" && wails3 task windows:build APP_VERSION="$VERSION" ARCH=amd64 )
+  fi
+  [ -f "$EXE" ] || { echo "找不到产物 $EXE" >&2; exit 1; }
+
+  assert_cmd_equal "windows/info.json 版本" "$VERSION" \
+    env INFO_JSON="$ROOT/build/windows/info.json" \
+    node -p "require(process.env.INFO_JSON).info['0409'].ProductVersion"
+  check_pe_version "$EXE" "$VERSION"
+  check_package win32 exe "$EXE"
+}
+
+# --both：两端都构建、都以草稿/下架状态上传（--publish none），全部成功后才统一发布一次。
+# 任一端门禁或上传失败都会直接退出，不发布；--replace 让重跑可以覆盖已上传的旧产物。
+if [ "$BOTH" = 1 ]; then
+  echo "[1/6] 构建 macOS"
+  build_darwin
+  echo "[2/6] 构建 Windows"
+  build_win32
+
+  UPLOAD_MAC=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
+    --file "$ZIP" --platform darwin --arch "$ARCH_NAME" --format zip --min-os 12.0 \
+    --notes "VaKao Hub $VERSION" --publish none --replace)
+  UPLOAD_WIN=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
+    --file "$EXE" --platform win32 --arch x64 --format exe --min-os 10.0 \
+    --notes "VaKao Hub $VERSION" --publish none --replace)
+
+  PUBLISH_ARGS=(--publish "$PUBLISH")
+  if [ -n "$GRAY_PERCENT" ]; then
+    PUBLISH_ARGS+=(--gray-percent "$GRAY_PERCENT")
+  fi
+  PUBLISH_CMD=(node "$CLI" publish --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
+    "${PUBLISH_ARGS[@]}")
+  VERIFY_CMD=(node "$CLI" verify --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
+    --expect "$PUBLISH" --platforms darwin,win32)
+
+  echo "版本: $VERSION (code $CODE)"
+  echo "macOS: $ZIP ($ARCH_NAME)"
+  echo "Windows: $EXE (x64)"
+  echo "发布: $PUBLISH"
+
+  if [ "$DRY_RUN" = 1 ]; then
+    echo "dry-run：两端只构建与门禁，不访问线上状态"
+    echo "步骤 1: 准备可上传版本（若已全量/灰度会先临时下架）"
+    printf '  %q' node "$CLI" stage --app "$APP_KEY" --version "$VERSION" --code "$CODE"
+    printf '\n步骤 2: 上传 macOS（不发布）\n  '
+    printf ' %q' "${UPLOAD_MAC[@]}"
+    printf '\n步骤 3: 上传 Windows（不发布）\n  '
+    printf ' %q' "${UPLOAD_WIN[@]}"
+    if [ "$PUBLISH" = "none" ]; then
+      printf '\n步骤 4: --publish none，跳过统一发布\n'
+    else
+      printf '\n步骤 4: 统一发布\n  '
+      printf ' %q' "${PUBLISH_CMD[@]}"
+      printf '\n步骤 5: 发布后复核\n  '
+      printf ' %q' "${VERIFY_CMD[@]}"
+      printf '\n'
+    fi
+    exit 0
+  fi
+
+  echo "[3/6] 准备可上传版本"
+  node "$CLI" stage --app "$APP_KEY" --version "$VERSION" --code "$CODE"
+  echo "[4/6] 上传 macOS（不发布）"
+  "${UPLOAD_MAC[@]}"
+  echo "[5/6] 上传 Windows（不发布）"
+  "${UPLOAD_WIN[@]}"
+
+  if [ "$PUBLISH" = "none" ]; then
+    echo "两端产物已上传，按 --publish none 未发布"
+  else
+    echo "[6/6] 统一发布（$PUBLISH）"
+    "${PUBLISH_CMD[@]}"
+    echo "发布后复核"
+    "${VERIFY_CMD[@]}"
+  fi
+  cleanup_old_zips
+  exit 0
+fi
+
+if [ "$PLATFORM" = "win32" ]; then
+  build_win32
+  UPLOAD=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
+    --file "$EXE" --platform win32 --arch x64 --format exe --min-os 10.0 \
+    --notes "VaKao Hub $VERSION" ${PASSTHRU[@]+"${PASSTHRU[@]}"})
+else
+  build_darwin
   UPLOAD=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
     --file "$ZIP" --platform darwin --arch "$ARCH_NAME" --format zip --min-os 12.0 \
     --notes "VaKao Hub $VERSION" ${PASSTHRU[@]+"${PASSTHRU[@]}"})

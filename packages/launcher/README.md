@@ -33,7 +33,16 @@ bin/VaKaoHub.app
 
 # Windows 产物走同一套版本、PE 版本与包形态门禁
 ./ship.sh --win32 --dry-run
+
+# 两端一起发：两端都先上传（不发布），全部成功后再统一发布一次并复核两个平台
+./ship.sh --both --dry-run
+./ship.sh --both
 ```
+
+单平台（`./ship.sh`、`./ship.sh --win32`）保持「上传后立即发布」的原有语义。同一版本要同时发布两端时用 `--both`：
+它会先构建两端并通过门禁，再显式把已全量/灰度的同版本临时下架（终端会打印），两端都以 `--publish none` 上传成功后
+才发布一次，最后用 `verify` 核对状态、versionCode 和两个平台的产物。中途任一端失败都不会发布，可直接重跑
+（上传带 `--replace`，会替换同平台/架构/格式的旧产物）。
 
 `build/darwin/Info.plist`、`build/windows/info.json` 等属于生成物，不要手改；改版本只改 `build/config.yml`，再运行 `common:update:build-assets`。
 
