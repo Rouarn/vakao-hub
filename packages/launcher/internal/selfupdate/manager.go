@@ -55,7 +55,7 @@ func (m *Manager) Prepare(ctx context.Context, format, filePath string) (Prepare
 			nil,
 		)
 	}
-	if !dirWritable(filepath.Dir(current)) {
+	if !install.IsDirWritable(filepath.Dir(current)) {
 		return Prepared{}, apperr.New(
 			apperr.KindPermission,
 			"selfupdate",
@@ -127,17 +127,6 @@ func (m *Manager) Start(prepared Prepared) error {
 		return apperr.New(apperr.KindInternal, "selfupdate.start", "启动更新程序失败，请手动下载安装", err)
 	}
 	return nil
-}
-
-func dirWritable(dir string) bool {
-	probe, err := os.CreateTemp(dir, ".vakaohub-write-*")
-	if err != nil {
-		return false
-	}
-	name := probe.Name()
-	probe.Close()
-	_ = os.Remove(name)
-	return true
 }
 
 func newOperationID() string {

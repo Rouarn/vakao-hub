@@ -140,12 +140,9 @@ func ValidateInstallDir(dir string) error {
 	if err != nil || !info.IsDir() {
 		return apperr.New(apperr.KindInternal, "install.dir", fmt.Sprintf("安装目录不存在：%s", dir), err)
 	}
-	probe, err := os.CreateTemp(dir, ".vakaohub-write-*")
-	if err != nil {
-		return apperr.New(apperr.KindPermission, "install.dir", "", err)
+	if !IsDirWritable(dir) {
+		return apperr.New(apperr.KindPermission, "install.dir", "", nil)
 	}
-	probe.Close()
-	_ = os.Remove(probe.Name())
 	return nil
 }
 
