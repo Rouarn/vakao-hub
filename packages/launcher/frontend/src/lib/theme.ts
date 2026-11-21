@@ -1,4 +1,4 @@
-import type { AppView } from '../api';
+import type { AppView } from '../../bindings/vakaohub/launcher/internal/service';
 
 const palette = ['#5fbedc', '#f0995f', '#a27fc2', '#eddf55'];
 

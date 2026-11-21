@@ -6,12 +6,7 @@
  * 这里直接监听 mousedown + mousemove，用 runtime 的窗口定位 API 移动窗口。
  */
 
-type RuntimePosition = { x: number; y: number };
-
-type WailsRuntime = {
-  WindowGetPosition?: () => Promise<RuntimePosition>;
-  WindowSetPosition?: (x: number, y: number) => void;
-};
+import { Window } from '@wailsio/runtime';
 
 const NO_DRAG_SELECTOR = 'button, a, input, select, textarea, label, [contenteditable="true"], [data-no-drag]';
 
@@ -25,20 +20,13 @@ export function useWindowDrag() {
   let nextX = 0;
   let nextY = 0;
 
-  function runtime(): WailsRuntime | undefined {
-    return (window as unknown as { runtime?: WailsRuntime }).runtime;
-  }
-
   async function onMouseDown(event: MouseEvent): Promise<void> {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest(NO_DRAG_SELECTOR)) return;
 
-    const rt = runtime();
-    if (!rt?.WindowGetPosition || !rt.WindowSetPosition) return;
-
     try {
-      const position = await rt.WindowGetPosition();
+      const position = await Window.Position();
       baseX = position.x;
       baseY = position.y;
     } catch {
@@ -62,7 +50,7 @@ export function useWindowDrag() {
     if (frame) return;
     frame = window.requestAnimationFrame(() => {
       frame = 0;
-      runtime()?.WindowSetPosition?.(nextX, nextY);
+      Window.SetPosition(nextX, nextY).catch(() => undefined);
     });
   }
 

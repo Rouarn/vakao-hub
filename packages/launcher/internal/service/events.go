@@ -1,7 +1,8 @@
-package main
+package service
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"vakaohub/launcher/internal/api"
@@ -21,51 +22,59 @@ const (
 
 const eventReportTimeout = 5 * time.Second
 
+// EventQueue 串行消费上报事件，并按 key 在进程内去重。
+type EventQueue struct {
+	ch   chan api.EventReport
+	mu   sync.Mutex
+	sent map[string]bool
+}
+
+func NewEventQueue(size int) *EventQueue {
+	return &EventQueue{
+		ch:   make(chan api.EventReport, size),
+		sent: make(map[string]bool),
+	}
+}
+
 // reportEvent 只负责把事件投进队列：队列满说明上报速度已经跟不上用户操作，
 // 此时丢弃事件比阻塞检查更新、下载或安装更合理。
-func (a *App) reportEvent(event api.EventReport) {
+func (h *Host) reportEvent(event api.EventReport) {
 	select {
-	case a.events <- event:
+	case h.events.ch <- event:
 	default:
 	}
 }
 
 // onceEvent 按 key 在进程内去重：一次下载/安装动作即使被重试或重复点击，
 // 也只对应一条事件，避免把统计放大。
-func (a *App) onceEvent(key string, event api.EventReport) {
-	a.sentMu.Lock()
-	if a.sent[key] {
-		a.sentMu.Unlock()
+func (h *Host) onceEvent(key string, event api.EventReport) {
+	h.events.mu.Lock()
+	if h.events.sent[key] {
+		h.events.mu.Unlock()
 		return
 	}
-	a.sent[key] = true
-	a.sentMu.Unlock()
-	a.reportEvent(event)
+	h.events.sent[key] = true
+	h.events.mu.Unlock()
+	h.reportEvent(event)
 }
 
 // eventWorker 串行消费事件队列：顺序上报保证 download_success 先于 install_success，
 // 失败直接丢弃，不上抛、不重试。
-func (a *App) eventWorker() {
-	for event := range a.events {
+func (h *Host) eventWorker() {
+	for event := range h.events.ch {
 		ctx, cancel := context.WithTimeout(context.Background(), eventReportTimeout)
-		_ = api.New(a.baseURL()).ReportEvent(ctx, event)
+		_ = h.newClient().ReportEvent(ctx, event)
 		cancel()
 	}
 }
 
-func (a *App) deviceID() string {
-	a.settingsMu.RLock()
-	defer a.settingsMu.RUnlock()
-	return a.settings.DeviceID
-}
-
 // eventFor 填充所有事件共有的应用与设备上下文，调用方再补类型与版本字段。
-func (a *App) eventFor(appKey, platform, arch string) api.EventReport {
+func (h *Host) eventFor(appKey, platform, arch string) api.EventReport {
 	return api.EventReport{
 		AppKey:   appKey,
 		Platform: platform,
 		Arch:     arch,
-		DeviceID: a.deviceID(),
+		DeviceID: h.settings.DeviceID(),
 	}
 }
 

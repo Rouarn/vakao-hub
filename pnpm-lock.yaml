@@ -236,6 +236,9 @@ importers:
 
   packages/launcher/frontend:
     dependencies:
+      '@wailsio/runtime':
+        specifier: 3.1.0
+        version: 3.1.0
       vue:
         specifier: 3.5.46
         version: 3.5.46(typescript@6.0.3)
@@ -1338,6 +1341,9 @@ packages:
 
   '@vue/shared@3.5.46':
     resolution: {integrity: sha512-P1WePbdzHrcIciWtmY2Im9EFhdakd3rZxYqvalOa3SfoxtF35Q8Uhmj1tKn6bWP4utcOpN8ao6BoJUItq0Uf+g==}
+
+  '@wailsio/runtime@3.1.0':
+    resolution: {integrity: sha512-noEAedvRyO8TLCrqhGwzrp+mbMxAIDa2rYmdJQOzvJV9MxgaZeXAJGNBiMiKMTSSy4ESOtQi4VH/5heSzi6ZmA==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -3883,6 +3889,8 @@ snapshots:
   '@vue/shared@3.5.44': {}
 
   '@vue/shared@3.5.46': {}
+
+  '@wailsio/runtime@3.1.0': {}
 
   accepts@2.0.0:
     dependencies:

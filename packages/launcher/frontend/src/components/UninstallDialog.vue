@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AppView } from '../api';
+import type { AppView } from '../../bindings/vakaohub/launcher/internal/service';
 
 defineProps<{
   target: AppView | null;

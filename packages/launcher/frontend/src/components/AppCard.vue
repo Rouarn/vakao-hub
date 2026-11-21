@@ -88,7 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { SELF_APP_KEY, type AppView, type Progress } from '../api';
+import { SELF_APP_KEY } from '../lib/constants';
+import type { AppView, Progress } from '../../bindings/vakaohub/launcher/internal/service';
 import { appColor } from '../lib/theme';
 import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
 

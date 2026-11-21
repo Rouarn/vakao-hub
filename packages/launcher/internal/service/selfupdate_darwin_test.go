@@ -1,6 +1,6 @@
 //go:build darwin
 
-package install
+package service
 
 import (
 	"os"

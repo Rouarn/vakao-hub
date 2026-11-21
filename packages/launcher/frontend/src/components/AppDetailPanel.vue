@@ -186,7 +186,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { SELF_APP_KEY, type AppView } from '../api';
+import { SELF_APP_KEY } from '../lib/constants';
+import type { AppView } from '../../bindings/vakaohub/launcher/internal/service';
 import type { DetailMeta } from '../lib/meta';
 import { appColor, releaseUrl } from '../lib/theme';
 import { formatBytes, formatDate, initial } from '../lib/format';

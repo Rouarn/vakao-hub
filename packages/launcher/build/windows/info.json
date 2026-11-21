@@ -1,15 +1,17 @@
 {
 	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
+		"file_version": "1.0.3",
+		"product_version": "1.0.3"
 	},
 	"info": {
-		"0000": {
-			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
+		"0409": {
+			"FileVersion": "1.0.3",
+			"ProductVersion": "1.0.3",
+			"CompanyName": "Rouarn",
+			"FileDescription": "VaKao Hub Launcher",
+			"LegalCopyright": "Copyright 2026 Rouarn",
+			"ProductName": "VaKaoHub",
+			"Comments": "VaKao Hub Launcher"
 		}
 	}
 }

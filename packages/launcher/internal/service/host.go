@@ -1,0 +1,78 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"vakaohub/launcher/internal/api"
+	"vakaohub/launcher/internal/install"
+	"vakaohub/launcher/internal/store"
+)
+
+// Host 持有 4 个 service 共享的依赖与状态。
+type Host struct {
+	app      *application.App
+	store    *store.Store
+	settings *SettingsState
+	events   *EventQueue
+	opMu     sync.Mutex
+}
+
+// NewHost 在 application.New 之后构造；app 只用于事件、窗口、对话框与退出。
+func NewHost(app *application.App) *Host {
+	st, err := store.Open()
+	if err != nil {
+		fmt.Println("读取已安装列表失败，本次运行使用内存记录：", err)
+		st = store.NewMemory()
+	}
+	return newHost(app, st)
+}
+
+func newHost(app *application.App, st *store.Store) *Host {
+	settings := loadSettings()
+	// 扫描已安装应用时要一并检查用户配置的安装目录。
+	install.SetInstallDir(settings.InstallDir)
+	if settings.DeviceID == "" {
+		settings.DeviceID = newDeviceID()
+		// 写盘失败只会导致下次启动重新生成标识，不影响启动与上报。
+		_ = saveSettings(settings)
+	}
+
+	host := &Host{
+		app:      app,
+		store:    st,
+		settings: NewSettingsState(settings),
+		events:   NewEventQueue(32),
+	}
+	go host.eventWorker()
+	return host
+}
+
+func (h *Host) context() context.Context {
+	if h.app != nil {
+		return h.app.Context()
+	}
+	return context.Background()
+}
+
+func (h *Host) newClient() *api.Client {
+	return api.New(h.settings.BaseURL())
+}
+
+func (h *Host) installDir() string {
+	return h.settings.Get().InstallDir
+}
+
+func (h *Host) emit(appKey, phase string, percent int, message string) {
+	if h.app == nil {
+		return
+	}
+	h.app.Event.Emit("install:progress", Progress{
+		AppKey:  appKey,
+		Phase:   phase,
+		Percent: percent,
+		Message: message,
+	})
+}

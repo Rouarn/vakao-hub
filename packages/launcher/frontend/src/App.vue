@@ -121,7 +121,16 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { appApi, SELF_APP_KEY, type AppView, type Progress, type Settings } from './api';
+import { Events } from '@wailsio/runtime';
+import {
+  CatalogService,
+  InstallService,
+  LauncherService,
+  SettingsService,
+} from '../bindings/vakaohub/launcher/internal/service';
+import type { AppView, Progress, Settings } from '../bindings/vakaohub/launcher/internal/service';
+import { InstallProgress } from '../bindings/events';
+import { SELF_APP_KEY } from './lib/constants';
 import type { DetailMeta } from './lib/meta';
 
 import AppCard from './components/AppCard.vue';
@@ -261,24 +270,18 @@ const selectedMeta = computed<DetailMeta>(() => {
   };
 });
 
-let client: ReturnType<typeof appApi> | null = null;
 let refreshTimer: number | undefined;
 let clockTimer: number | undefined;
-
-function api(): ReturnType<typeof appApi> {
-  if (!client) client = appApi();
-  return client;
-}
+let offProgress: (() => void) | undefined;
 
 async function load(): Promise<void> {
   loading.value = true;
   error.value = '';
   try {
-    const current = await api();
-    launcherVersion.value = (await current.GetAppVersion()) || 'dev';
-    settings.value = await current.GetSettings();
+    launcherVersion.value = (await LauncherService.GetAppVersion()) || 'dev';
+    settings.value = await SettingsService.GetSettings();
     if (!settingsVisible.value) draftBaseUrl.value = settings.value.baseUrl;
-    const catalog = await current.GetCatalog();
+    const catalog = await CatalogService.GetCatalog();
     apps.value = catalog.apps ?? [];
     platform.value = catalog.platform;
     arch.value = catalog.arch;
@@ -314,7 +317,7 @@ async function install(app: AppView): Promise<void> {
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
   error.value = '';
   try {
-    await api().Install(app.appKey, app.artifactID);
+    await InstallService.Install(app.appKey, app.artifactID);
     if (selfUpdate) {
       restartForSelfUpdate();
       return;
@@ -333,7 +336,7 @@ async function install(app: AppView): Promise<void> {
 function restartForSelfUpdate(): void {
   setTimeout(() => {
     try {
-      api().Quit();
+      LauncherService.Quit();
     } catch {
       // 开发模式（浏览器）没有 Wails 运行时，保持窗口即可。
     }
@@ -397,7 +400,7 @@ async function uninstall(app: AppView, deleteData: boolean): Promise<void> {
   menuKey.value = '';
   error.value = '';
   try {
-    await api().Uninstall(app.appKey, deleteData);
+    await InstallService.Uninstall(app.appKey, deleteData);
     const next = { ...progress.value };
     delete next[app.appKey];
     progress.value = next;
@@ -411,7 +414,7 @@ async function launch(app: AppView): Promise<void> {
   menuKey.value = '';
   error.value = '';
   try {
-    await api().Launch(app.appKey);
+    await CatalogService.Launch(app.appKey);
   } catch (cause) {
     error.value = (cause as Error).message;
   }
@@ -454,12 +457,11 @@ function closeMenu(): void {
 
 function openSettings(): void {
   draftBaseUrl.value = settings.value.baseUrl;
-  draftInstallDir.value = settings.value.installDir;
+  draftInstallDir.value = settings.value.installDir ?? '';
   settingsError.value = '';
   settingsVisible.value = true;
   // 默认目录由主进程给，避免前端再写一份 ~/Applications。
-  api()
-    .GetDefaultInstallDir()
+  InstallService.GetDefaultInstallDir()
     .then((value) => {
       if (value) defaultInstallDir.value = value;
     })
@@ -470,7 +472,7 @@ function openSettings(): void {
 async function chooseInstallDir(): Promise<void> {
   settingsError.value = '';
   try {
-    const dir = await api().SelectInstallDir();
+    const dir = await InstallService.SelectInstallDir();
     if (dir) draftInstallDir.value = dir;
   } catch (cause) {
     settingsError.value = (cause as Error).message;
@@ -482,7 +484,7 @@ async function saveSettings(): Promise<void> {
   error.value = '';
   settingsError.value = '';
   try {
-    settings.value = await api().SaveSettings(draftBaseUrl.value, draftInstallDir.value);
+    settings.value = await SettingsService.SaveSettings(draftBaseUrl.value, draftInstallDir.value);
     settingsVisible.value = false;
     await load();
   } catch (cause) {
@@ -495,16 +497,14 @@ async function saveSettings(): Promise<void> {
 function reveal(app: AppView): Promise<void> {
   menuKey.value = '';
   error.value = '';
-  return api()
-    .Reveal(app.appKey)
-    .catch((cause: unknown) => {
-      error.value = (cause as Error).message;
-    });
+  return CatalogService.Reveal(app.appKey).catch((cause: unknown) => {
+    error.value = (cause as Error).message;
+  });
 }
 
 function openUrl(url: string): void {
   menuKey.value = '';
-  api().OpenURL(url);
+  LauncherService.OpenURL(url);
 }
 
 function busy(appKey: string): boolean {
@@ -521,7 +521,7 @@ function saveRefreshInterval(): void {
 }
 
 async function resetBaseUrl(): Promise<void> {
-  draftBaseUrl.value = await api().GetDefaultBaseURL();
+  draftBaseUrl.value = await SettingsService.GetDefaultBaseURL();
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -570,15 +570,7 @@ onMounted(() => {
   void load();
   window.addEventListener('click', closeMenu);
   window.addEventListener('keydown', onKeydown);
-  const runtime = (
-    window as unknown as {
-      runtime?: {
-        EventsOn(name: string, callback: (payload: Progress) => void): void;
-        EventsOff(name: string): void;
-      };
-    }
-  ).runtime;
-  runtime?.EventsOn('install:progress', onProgress);
+  offProgress = Events.On(InstallProgress, (event) => onProgress(event.data as Progress));
 
   restartRefreshTimer();
   clockTimer = window.setInterval(() => {
@@ -591,11 +583,6 @@ onUnmounted(() => {
   if (clockTimer) window.clearInterval(clockTimer);
   window.removeEventListener('click', closeMenu);
   window.removeEventListener('keydown', onKeydown);
-  const runtime = (
-    window as unknown as {
-      runtime?: { EventsOff(name: string): void };
-    }
-  ).runtime;
-  runtime?.EventsOff('install:progress');
+  offProgress?.();
 });
 </script>

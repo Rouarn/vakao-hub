@@ -1,12 +1,14 @@
-package main
+package service
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"vakaohub/launcher/internal/install"
 )
@@ -21,6 +23,98 @@ type Settings struct {
 	// InstallDir 是用户自定义的应用安装目录，空值表示平台默认目录
 	//（macOS 为 ~/Applications）。已安装应用不会因修改它而迁移。
 	InstallDir string `json:"installDir,omitempty"`
+}
+
+// SettingsState 提供并发安全的设置读写。
+type SettingsState struct {
+	mu sync.RWMutex
+	v  Settings
+}
+
+func NewSettingsState(v Settings) *SettingsState {
+	return &SettingsState{v: v}
+}
+
+func (s *SettingsState) Get() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.v
+}
+
+func (s *SettingsState) Set(v Settings) {
+	s.mu.Lock()
+	s.v = v
+	s.mu.Unlock()
+}
+
+func (s *SettingsState) BaseURL() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.v.BaseURL
+}
+
+func (s *SettingsState) DeviceID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.v.DeviceID
+}
+
+func (s *SettingsState) update(fn func(*Settings) error) (Settings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	next := s.v
+	if err := fn(&next); err != nil {
+		return s.v, err
+	}
+	if err := saveSettings(next); err != nil {
+		return s.v, err
+	}
+	s.v = next
+	return next, nil
+}
+
+type SettingsService struct {
+	host *Host
+}
+
+func NewSettings(host *Host) *SettingsService {
+	return &SettingsService{host: host}
+}
+
+func (s *SettingsService) GetSettings() Settings {
+	return s.host.settings.Get()
+}
+
+func (s *SettingsService) SaveSettings(baseURL, installDir string) (Settings, error) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return s.host.settings.Get(), fmt.Errorf("服务地址不能为空")
+	}
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return s.host.settings.Get(), fmt.Errorf("服务地址必须以 http:// 或 https:// 开头")
+	}
+	installDir = strings.TrimSpace(installDir)
+	if err := install.ValidateInstallDir(installDir); err != nil {
+		return s.host.settings.Get(), err
+	}
+
+	next, err := s.host.settings.update(func(settings *Settings) error {
+		settings.BaseURL = baseURL
+		settings.InstallDir = installDir
+		return nil
+	})
+	if err != nil {
+		return s.host.settings.Get(), err
+	}
+	// 目录变化后已安装扫描范围也要跟着变，否则新装的应用刷新后不可见。
+	install.SetInstallDir(installDir)
+	return next, nil
+}
+
+// GetDefaultBaseURL 返回内置的默认服务地址，前端「恢复默认」不再自带副本。
+func (s *SettingsService) GetDefaultBaseURL() string {
+	return defaultBaseURL
 }
 
 // newDeviceID 生成 16 字节随机数的十六进制串；读取系统随机源失败时返回空串，

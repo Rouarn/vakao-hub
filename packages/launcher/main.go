@@ -2,39 +2,60 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
+	"os"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"vakaohub/launcher/internal/service"
+	launcherversion "vakaohub/launcher/internal/version"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func main() {
-	app := NewApp()
+func init() {
+	application.RegisterEvent[service.Progress]("install:progress")
+}
 
-	err := wails.Run(&options.App{
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Println(launcherversion.Version)
+		return
+	}
+
+	app := application.New(application.Options{
+		Name:        "VaKao Hub",
+		Description: "VaKao Hub Launcher",
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+	})
+
+	host := service.NewHost(app)
+	app.RegisterService(application.NewService(service.NewCatalog(host)))
+	app.RegisterService(application.NewService(service.NewInstall(host)))
+	app.RegisterService(application.NewService(service.NewSettings(host)))
+	app.RegisterService(application.NewService(service.NewLauncher(host)))
+
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "VaKao Hub",
 		Width:            1200,
 		Height:           800,
 		MinWidth:         980,
 		MinHeight:        620,
-		BackgroundColour: &options.RGBA{R: 243, G: 241, B: 236, A: 1},
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHidden(),
-		},
-		OnStartup: app.startup,
-		Bind: []interface{}{
-			app,
+		BackgroundColour: application.NewRGB(243, 241, 236),
+		URL:              "/",
+		Mac: application.MacWindow{
+			TitleBar:                application.MacTitleBarHiddenInset,
+			InvisibleTitleBarHeight: 36,
 		},
 	})
-	if err != nil {
+
+	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
 }

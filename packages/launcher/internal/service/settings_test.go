@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"encoding/json"
@@ -13,13 +13,8 @@ import (
 
 // 并发保存/读取设置不得触发 data race（配合 go test -race）。
 func TestSettingsConcurrentAccess(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	// Linux 下 os.UserConfigDir 优先读 XDG_CONFIG_HOME，一并指到临时目录，
-	// 避免测试文件落到 runner 的真实配置目录。
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-
-	app := NewApp()
+	host := newTestHost(t, store.NewMemory())
+	settings := NewSettings(host)
 	var wg sync.WaitGroup
 	for worker := 0; worker < 8; worker++ {
 		wg.Add(1)
@@ -27,16 +22,16 @@ func TestSettingsConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < 30; i++ {
 				url := fmt.Sprintf("https://example.com/%d/%d", worker, i)
-				if _, err := app.SaveSettings(url, ""); err != nil {
+				if _, err := settings.SaveSettings(url, ""); err != nil {
 					t.Errorf("SaveSettings: %v", err)
 					return
 				}
-				if got := app.GetSettings(); got.BaseURL == "" {
+				if got := settings.GetSettings(); got.BaseURL == "" {
 					t.Errorf("GetSettings 返回空地址")
 					return
 				}
-				if got := app.baseURL(); got == "" {
-					t.Errorf("baseURL 返回空地址")
+				if got := host.settings.BaseURL(); got == "" {
+					t.Errorf("BaseURL 返回空地址")
 					return
 				}
 			}
@@ -63,23 +58,23 @@ func TestSettingsConcurrentAccess(t *testing.T) {
 	}
 }
 
-// 配置目录不可用时必须降级为内存 store，不能让 a.store 为 nil。
-func TestNewAppFallsBackToMemoryStore(t *testing.T) {
+// 配置目录不可用时必须降级为内存 store，不能让 host.store 为 nil。
+func TestNewHostFallsBackToMemoryStore(t *testing.T) {
 	blocker := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", blocker)
 
-	app := NewApp()
-	if app.store == nil {
+	host := NewHost(nil)
+	if host.store == nil {
 		t.Fatal("store 为 nil")
 	}
 	item := store.Installed{AppKey: "wiredeck", Name: "WireDeck", InstallPath: "/tmp/wiredeck"}
-	if err := app.store.Put(item); err != nil {
+	if err := host.store.Put(item); err != nil {
 		t.Fatalf("内存 store Put: %v", err)
 	}
-	if _, ok := app.store.Get("wiredeck"); !ok {
+	if _, ok := host.store.Get("wiredeck"); !ok {
 		t.Fatal("内存 store 未保存记录")
 	}
 }
