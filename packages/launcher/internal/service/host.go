@@ -113,11 +113,16 @@ func newOperationID() string {
 	return "op-" + hex.EncodeToString(buffer)
 }
 
-func (h *Host) emit(appKey, opID, phase string, percent int, message string, retryable bool) {
-	if h.app == nil {
+// emitProgress 是事件出口，测试可替换；app 为空时（单元测试）默认丢弃。
+var emitProgress = func(app *application.App, payload Progress) {
+	if app == nil {
 		return
 	}
-	h.app.Event.Emit("install:progress", Progress{
+	app.Event.Emit("install:progress", payload)
+}
+
+func (h *Host) emit(appKey, opID, phase string, percent int, message string, retryable bool) {
+	emitProgress(h.app, Progress{
 		AppKey:      appKey,
 		Phase:       phase,
 		Percent:     percent,

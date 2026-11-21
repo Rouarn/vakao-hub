@@ -664,6 +664,10 @@ function onKeydown(event: KeyboardEvent): void {
 function onProgress(payload: Progress): void {
   // 错误以 Promise 拒绝为准，这里只更新进度，避免 canceled 被当成错误弹窗。
   progress.value = { ...progress.value, [payload.appKey]: payload };
+  // 无法确认运行状态时主进程仍会继续安装；把告警留在可见通知里，避免静默覆盖。
+  if (payload.phase === 'warning' && payload.message) {
+    updateNotice.value = { status: 'warning', message: payload.message, updatedAt: Date.now() };
+  }
 }
 
 function restartRefreshTimer(): void {

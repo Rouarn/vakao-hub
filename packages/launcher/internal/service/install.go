@@ -154,10 +154,8 @@ func (s *InstallService) install(ctx context.Context, appKey string, artifactID 
 	// 安装前检查目标目录内是否有进程占用：首次命中只返回 running 错误，
 	// 由前端确认后再走 QuitAppsAndInstall 继续，不在未确认时结束任何进程。
 	if existingPath != "" {
-		processes, detectErr := s.detectRunning(appKey, existingPath)
-		if detectErr != nil {
-			slog.Warn("检测运行中应用失败", "app", appKey, "error", detectErr)
-		} else if len(processes) > 0 {
+		processes := s.checkRunning(appKey, opID, app.Name, existingPath)
+		if len(processes) > 0 {
 			if !quitRunning {
 				blocked := apperr.New(
 					apperr.KindRunning,
@@ -233,7 +231,26 @@ func (s *InstallService) detectRunning(appKey, target string) ([]install.Running
 	if appKey == selfAppKey {
 		return nil, nil
 	}
-	return install.RunningProcesses(target)
+	return runningProcesses(target)
+}
+
+// runningProcesses 允许测试模拟检测失败。
+var runningProcesses = install.RunningProcesses
+
+// checkRunning 在安装前检测目标目录内的进程。无法检测时不阻断安装，
+// 但必须让用户知道「运行状态未能确认、已直接继续」，不能静默覆盖。
+func (s *InstallService) checkRunning(appKey, opID, appName, target string) []install.RunningProcess {
+	processes, err := s.detectRunning(appKey, target)
+	if err != nil {
+		slog.Warn("检测运行中应用失败", "app", appKey, "error", err)
+		s.host.emit(appKey, opID, "warning", -1, runningUnknownMessage(appName), false)
+		return nil
+	}
+	return processes
+}
+
+func runningUnknownMessage(appName string) string {
+	return fmt.Sprintf("无法确认「%s」是否正在运行，已直接继续安装；如安装失败，请先手动退出该应用", appName)
 }
 
 // fail 统一把错误写日志并推送给前端：日志保留系统原话，UI 只拿中文文案。
