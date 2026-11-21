@@ -71,7 +71,7 @@ func FindApps(name string) []Detected {
 
 // pathRank 给扫描结果排优先级；数值越小越优先。
 func pathRank(path string) int {
-	if scanInstallDir != "" && strings.HasPrefix(path, scanInstallDir+string(os.PathSeparator)) {
+	if scanDir := configuredInstallDir(); scanDir != "" && strings.HasPrefix(path, scanDir+string(os.PathSeparator)) {
 		return 0
 	}
 	home, err := os.UserHomeDir()
@@ -91,8 +91,8 @@ func InvalidateIndex() {
 
 func scanInstalledApps() []installedApp {
 	roots := make([]string, 0, 3)
-	if scanInstallDir != "" {
-		roots = append(roots, scanInstallDir)
+	if scanDir := configuredInstallDir(); scanDir != "" {
+		roots = append(roots, scanDir)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		roots = append(roots, filepath.Join(home, "Applications"))

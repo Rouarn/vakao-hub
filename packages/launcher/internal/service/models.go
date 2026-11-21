@@ -4,10 +4,12 @@ import "vakaohub/launcher/internal/api"
 
 // Progress 通过 Wails 事件推送给前端。
 type Progress struct {
-	AppKey  string `json:"appKey"`
-	Phase   string `json:"phase"`
-	Percent int    `json:"percent"`
-	Message string `json:"message"`
+	AppKey      string `json:"appKey"`
+	Phase       string `json:"phase"`
+	Percent     int    `json:"percent"`
+	Message     string `json:"message"`
+	OperationID string `json:"operationID"`
+	Retryable   bool   `json:"retryable"`
 }
 
 type AppView struct {

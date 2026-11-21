@@ -1,12 +1,14 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
 	"time"
 
 	"vakaohub/launcher/internal/api"
+	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/contract"
 	"vakaohub/launcher/internal/install"
 	"vakaohub/launcher/internal/store"
@@ -20,16 +22,22 @@ func NewCatalog(host *Host) *CatalogService {
 	return &CatalogService{host: host}
 }
 
-func (s *CatalogService) GetCatalog() (CatalogView, error) {
-	s.host.opMu.Lock()
-	defer s.host.opMu.Unlock()
-	return s.catalogLocked()
+func (s *CatalogService) GetCatalog(ctx context.Context) (CatalogView, error) {
+	_, release, err := s.host.beginOp()
+	if err != nil {
+		return CatalogView{}, err
+	}
+	defer release()
+
+	ctx, cancel := context.WithTimeout(ctx, s.host.timeouts.Catalog)
+	defer cancel()
+	return s.catalogLocked(ctx)
 }
 
-func (s *CatalogService) catalogLocked() (CatalogView, error) {
+func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error) {
 	platform, arch := platformInfo()
 	client := s.host.newClient()
-	response, err := client.Catalog(s.host.context(), platform, arch)
+	response, err := client.Catalog(ctx, platform, arch)
 	if err != nil {
 		return CatalogView{}, err
 	}
@@ -168,8 +176,11 @@ func (s *CatalogService) catalogLocked() (CatalogView, error) {
 }
 
 func (s *CatalogService) Launch(appKey string) error {
-	s.host.opMu.Lock()
-	defer s.host.opMu.Unlock()
+	_, release, err := s.host.beginOp()
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	// 启动器自身就是当前进程，再执行 open 只会打开安装记录里的旧路径（用户可能已挪动 bundle），
 	// 这里直接视为已启动，避免误报“文件不存在”。
@@ -179,7 +190,7 @@ func (s *CatalogService) Launch(appKey string) error {
 
 	item, ok := s.host.store.Get(appKey)
 	if !ok {
-		return fmt.Errorf("尚未安装该应用")
+		return apperr.New(apperr.KindInternal, "launch", "尚未安装该应用", nil)
 	}
 	if _, err := os.Stat(item.InstallPath); err != nil {
 		// 记录路径失效时先重新扫描并修正记录，避免用户挪动应用后永远打不开。
@@ -191,7 +202,12 @@ func (s *CatalogService) Launch(appKey string) error {
 			install.InvalidateIndex()
 		} else {
 			_ = s.host.store.Remove(appKey)
-			return fmt.Errorf("%s 已不在原安装位置，可能已被移动或删除；请在软件中心重新安装", item.Name)
+			return apperr.New(
+				apperr.KindInternal,
+				"launch",
+				fmt.Sprintf("%s 已不在原安装位置，可能已被移动或删除；请在软件中心重新安装", item.Name),
+				err,
+			)
 		}
 	}
 	if err := install.Launch(item.InstallPath); err != nil {
@@ -206,8 +222,11 @@ func (s *CatalogService) Launch(appKey string) error {
 
 // Reveal 在系统文件管理器中选中应用。
 func (s *CatalogService) Reveal(appKey string) error {
-	s.host.opMu.Lock()
-	defer s.host.opMu.Unlock()
+	_, release, err := s.host.beginOp()
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	path := ""
 	if appKey == "vakaohub" {
@@ -218,14 +237,17 @@ func (s *CatalogService) Reveal(appKey string) error {
 	if path == "" {
 		item, ok := s.host.store.Get(appKey)
 		if !ok {
-			return fmt.Errorf("尚未安装该应用")
+			return apperr.New(apperr.KindInternal, "reveal", "尚未安装该应用", nil)
 		}
 		path = item.InstallPath
 	}
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("安装目录不存在：%s", path)
+		return apperr.New(apperr.KindInternal, "reveal", fmt.Sprintf("安装目录不存在：%s", path), err)
 	}
-	return install.Reveal(path)
+	if err := install.Reveal(path); err != nil {
+		return apperr.New(apperr.KindInternal, "reveal", "无法打开安装位置，请稍后重试", err)
+	}
+	return nil
 }
 
 func platformInfo() (string, string) {

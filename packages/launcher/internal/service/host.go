@@ -2,14 +2,40 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"vakaohub/launcher/internal/api"
+	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/install"
 	"vakaohub/launcher/internal/store"
 )
+
+type timeouts struct {
+	Catalog       time.Duration
+	Download      time.Duration
+	DownloadStall time.Duration
+	Hash          time.Duration
+	Extract       time.Duration
+	Installer     time.Duration
+	SelfUpdate    time.Duration
+}
+
+func defaultTimeouts() timeouts {
+	return timeouts{
+		Catalog:       30 * time.Second,
+		Download:      30 * time.Minute,
+		DownloadStall: 60 * time.Second,
+		Hash:          2 * time.Minute,
+		Extract:       10 * time.Minute,
+		Installer:     30 * time.Minute,
+		SelfUpdate:    10 * time.Minute,
+	}
+}
 
 // Host 持有 4 个 service 共享的依赖与状态。
 type Host struct {
@@ -18,6 +44,8 @@ type Host struct {
 	settings *SettingsState
 	events   *EventQueue
 	opMu     sync.Mutex
+	opID     string
+	timeouts timeouts
 }
 
 // NewHost 在 application.New 之后构造；app 只用于事件、窗口、对话框与退出。
@@ -45,6 +73,7 @@ func newHost(app *application.App, st *store.Store) *Host {
 		store:    st,
 		settings: NewSettingsState(settings),
 		events:   NewEventQueue(32),
+		timeouts: defaultTimeouts(),
 	}
 	go host.eventWorker()
 	return host
@@ -65,14 +94,33 @@ func (h *Host) installDir() string {
 	return h.settings.Get().InstallDir
 }
 
-func (h *Host) emit(appKey, phase string, percent int, message string) {
+// beginOp 保证同一时刻只有一个长操作；第二个请求直接返回 busy。
+func (h *Host) beginOp() (string, func(), error) {
+	if !h.opMu.TryLock() {
+		return "", nil, apperr.New(apperr.KindBusy, "operation", "", nil)
+	}
+	h.opID = newOperationID()
+	return h.opID, h.opMu.Unlock, nil
+}
+
+func newOperationID() string {
+	buffer := make([]byte, 8)
+	if _, err := rand.Read(buffer); err != nil {
+		return fmt.Sprintf("op-%d", time.Now().UnixNano())
+	}
+	return "op-" + hex.EncodeToString(buffer)
+}
+
+func (h *Host) emit(appKey, opID, phase string, percent int, message string, retryable bool) {
 	if h.app == nil {
 		return
 	}
 	h.app.Event.Emit("install:progress", Progress{
-		AppKey:  appKey,
-		Phase:   phase,
-		Percent: percent,
-		Message: message,
+		AppKey:      appKey,
+		Phase:       phase,
+		Percent:     percent,
+		Message:     message,
+		OperationID: opID,
+		Retryable:   retryable,
 	})
 }

@@ -4,6 +4,7 @@ package service
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/contract"
 	"vakaohub/launcher/internal/install"
 )
@@ -25,73 +27,99 @@ const windowsCreateNoWindow = 0x08000000
 // Windows 不允许覆盖或改名正在运行的可执行文件，因此与 macOS 同思路：
 // 先把新 exe 落到缓存目录（stage），再启动一个脱离父进程的 PowerShell 脚本；
 // 脚本等本进程退出后把旧 exe 改名备份、放入新 exe 并重新拉起，任一步失败就回滚。
-func (s *InstallService) selfUpdate(format, filePath string) error {
+func (s *InstallService) selfUpdate(ctx context.Context, format, filePath string) error {
 	target, _, ok := install.CurrentBundle()
 	if !ok {
-		return fmt.Errorf("当前不是从安装位置启动，无法自动更新；请手动下载替换")
+		return apperr.New(
+			apperr.KindUnsupported,
+			"selfupdate",
+			"当前不是从安装位置启动，无法自动更新；请手动下载替换",
+			nil,
+		)
 	}
 	// 目标目录不可写时替换必然失败，提前拦下比让脚本静默失败更好。
 	if !dirWritable(filepath.Dir(target)) {
-		return fmt.Errorf("没有权限替换 %s，请手动下载安装", target)
+		return apperr.New(apperr.KindPermission, "selfupdate", "没有权限替换启动器，请手动下载安装", nil)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, s.host.timeouts.SelfUpdate)
+	defer cancel()
 
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.cache")
 	}
 	stage := filepath.Join(cache, "vakaohub", "updates", "stage")
 	if err := os.RemoveAll(stage); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.stage")
 	}
 	if err := os.MkdirAll(stage, 0o755); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.stage")
 	}
+	started := false
+	defer func() {
+		if !started {
+			_ = os.RemoveAll(stage)
+		}
+	}()
 
-	staged, err := stageExecutable(format, filePath, stage, filepath.Base(target))
+	staged, err := stageExecutable(ctx, format, filePath, stage, filepath.Base(target))
 	if err != nil {
 		return err
 	}
 	logPath := filepath.Join(filepath.Dir(stage), "self-update.log")
-	return startWindowsReplaceScript(staged, target, target+".old", logPath)
+	if err := startWindowsReplaceScript(staged, target, target+".old", logPath); err != nil {
+		return err
+	}
+	started = true
+	return nil
 }
 
 // stageExecutable 把待替换的 exe 复制/解压到缓存目录。
 // 安装流程的下载文件位于临时目录，Install 返回后会被清理，因此必须复制出来。
-func stageExecutable(format, filePath, stageDir, name string) (string, error) {
+func stageExecutable(ctx context.Context, format, filePath, stageDir, name string) (string, error) {
 	switch format {
 	case contract.FormatEXE:
 		target := filepath.Join(stageDir, name)
-		if err := copyFile(filePath, target); err != nil {
-			return "", fmt.Errorf("准备更新文件失败：%v", err)
+		if err := copyFileContext(ctx, filePath, target); err != nil {
+			return "", err
 		}
 		return target, nil
 	case contract.FormatZIP:
 		reader, err := zip.OpenReader(filePath)
 		if err != nil {
-			return "", err
+			return "", apperr.New(apperr.KindCorrupt, "selfupdate.zip", "", err)
 		}
 		defer reader.Close()
 
 		for _, file := range reader.File {
+			if err := ctx.Err(); err != nil {
+				return "", apperr.FromContext(err, "selfupdate.zip")
+			}
 			if file.FileInfo().IsDir() || !strings.HasSuffix(strings.ToLower(file.Name), ".exe") {
 				continue
 			}
 			target := filepath.Join(stageDir, filepath.Base(file.Name))
-			if err := extractZipMember(file, target); err != nil {
+			if err := extractZipMember(ctx, file, target); err != nil {
 				return "", err
 			}
 			return target, nil
 		}
-		return "", fmt.Errorf("压缩包内未找到可执行文件（.exe），无法完成更新")
+		return "", apperr.New(apperr.KindCorrupt, "selfupdate.zip", "安装包内未找到可执行文件（.exe），无法完成更新", nil)
 	default:
-		return "", fmt.Errorf("Windows 启动器暂不支持 %s 格式自动更新，请手动下载安装", format)
+		return "", apperr.New(
+			apperr.KindUnsupported,
+			"selfupdate.format",
+			fmt.Sprintf("启动器暂不支持 %s 格式自动更新，请手动下载安装", format),
+			nil,
+		)
 	}
 }
 
 func startWindowsReplaceScript(staged, target, backup, logPath string) error {
 	scriptPath := filepath.Join(filepath.Dir(staged), "self-update.ps1")
 	if err := os.WriteFile(scriptPath, []byte(selfUpdateScriptWindows()), 0o600); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.script")
 	}
 
 	command := exec.Command(
@@ -111,7 +139,7 @@ func startWindowsReplaceScript(staged, target, backup, logPath string) error {
 		CreationFlags: windowsCreateNoWindow,
 	}
 	if err := command.Start(); err != nil {
-		return fmt.Errorf("启动更新脚本失败：%w", err)
+		return apperr.New(apperr.KindInternal, "selfupdate.script", "启动更新程序失败，请手动下载安装", err)
 	}
 	// 脚本要等本进程退出后继续跑，不能 Wait；释放句柄即可。
 	_ = command.Process.Release()
@@ -186,42 +214,72 @@ func dirWritable(dir string) bool {
 	return true
 }
 
-func copyFile(source, destination string) error {
+func copyFileContext(ctx context.Context, source, destination string) error {
 	in, err := os.Open(source)
 	if err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.copy")
 	}
 	defer in.Close()
 
 	out, err := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.copy")
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+	defer out.Close()
+
+	buffer := make([]byte, 128*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return apperr.FromContext(err, "selfupdate.copy")
+		}
+		read, readErr := in.Read(buffer)
+		if read > 0 {
+			if _, err := out.Write(buffer[:read]); err != nil {
+				return apperr.FromOS(err, "selfupdate.copy")
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return apperr.FromOS(readErr, "selfupdate.copy")
+		}
 	}
-	return out.Close()
 }
 
 // extractZipMember 解压单个成员并创建父目录。
-func extractZipMember(file *zip.File, target string) error {
+func extractZipMember(ctx context.Context, file *zip.File, target string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.zip")
 	}
 	source, err := file.Open()
 	if err != nil {
-		return err
+		return apperr.New(apperr.KindCorrupt, "selfupdate.zip", "", err)
 	}
 	defer source.Close()
 
 	destination, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, file.Mode())
 	if err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.zip")
 	}
-	if _, err := io.Copy(destination, source); err != nil {
-		destination.Close()
-		return err
+	defer destination.Close()
+
+	buffer := make([]byte, 128*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return apperr.FromContext(err, "selfupdate.zip")
+		}
+		read, readErr := source.Read(buffer)
+		if read > 0 {
+			if _, err := destination.Write(buffer[:read]); err != nil {
+				return apperr.FromOS(err, "selfupdate.zip")
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return apperr.FromOS(readErr, "selfupdate.zip")
+		}
 	}
-	return destination.Close()
 }

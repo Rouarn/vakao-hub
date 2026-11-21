@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
+
+	"vakaohub/launcher/internal/apperr"
 )
 
 // EventReport 对应服务端 ReportEventDto。零值字段用 omitempty 省略：
@@ -28,7 +28,7 @@ type EventReport struct {
 func (c *Client) ReportEvent(ctx context.Context, event EventReport) error {
 	body, err := json.Marshal(event)
 	if err != nil {
-		return err
+		return apperr.New(apperr.KindInternal, "report.encode", "", err)
 	}
 
 	request, err := http.NewRequestWithContext(
@@ -38,18 +38,18 @@ func (c *Client) ReportEvent(ctx context.Context, event EventReport) error {
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return err
+		return apperr.New(apperr.KindInternal, "report.request", "", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return fmt.Errorf("事件上报失败：%w", err)
+		return apperr.FromContext(err, "report")
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode >= http.StatusBadRequest {
-		return errors.New("事件上报失败：HTTP " + response.Status)
+		return apperr.FromHTTPStatus(response.StatusCode, "report", "")
 	}
 	return nil
 }

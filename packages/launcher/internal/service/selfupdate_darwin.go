@@ -3,14 +3,15 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 
+	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/install"
 )
 
@@ -19,38 +20,66 @@ import (
 // 运行中的 bundle 不能就地覆盖（进程还映射着旧文件），因此分三步：
 // 解压并校验新包到缓存目录 → 启动脱离进程组的后台脚本 → 脚本等本进程退出后
 // 把旧包改名备份、放入新包并重新打开；任一步失败都回滚到旧包。
-func (s *InstallService) selfUpdate(format, filePath string) error {
+func (s *InstallService) selfUpdate(ctx context.Context, format, filePath string) error {
 	current, _, ok := install.CurrentBundle()
 	if !ok {
-		return fmt.Errorf("当前不是从 .app 启动，无法自动更新；请手动下载替换")
+		return apperr.New(
+			apperr.KindUnsupported,
+			"selfupdate",
+			"当前不是从 .app 启动，无法自动更新；请手动下载替换",
+			nil,
+		)
 	}
 	// /Applications 属于 root 时替换必然失败，提前拦下比让脚本静默失败更好。
 	if err := syscall.Access(filepath.Dir(current), 0x2 /* W_OK */); err != nil {
-		return fmt.Errorf("没有权限替换 %s，请手动下载安装", current)
+		return apperr.New(apperr.KindPermission, "selfupdate", "没有权限替换启动器，请手动下载安装", err)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, s.host.timeouts.SelfUpdate)
+	defer cancel()
 
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.cache")
 	}
 	stage := filepath.Join(cache, "vakaohub", "updates", "stage")
 	if err := os.RemoveAll(stage); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.stage")
 	}
-	staged, err := install.ExtractApp(format, filePath, stage)
+	started := false
+	defer func() {
+		if !started {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+
+	staged, err := install.ExtractApp(ctx, format, filePath, stage)
 	if err != nil {
 		return err
 	}
-	if output, err := exec.Command("codesign", "--verify", "--deep", "--strict", staged).CombinedOutput(); err != nil {
-		return fmt.Errorf("代码签名校验失败：%v %s", err, strings.TrimSpace(string(output)))
+	output, err := exec.CommandContext(ctx, "codesign", "--verify", "--deep", "--strict", staged).CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return apperr.FromContext(ctx.Err(), "selfupdate.signature")
+		}
+		return apperr.New(
+			apperr.KindSignature,
+			"selfupdate.signature",
+			"",
+			fmt.Errorf("%w: %s", err, string(output)),
+		)
 	}
-	return startReplaceScript(staged, current, stage)
+	if err := startReplaceScript(staged, current, stage); err != nil {
+		return err
+	}
+	started = true
+	return nil
 }
 
 func startReplaceScript(stagedApp, targetApp, stageDir string) error {
 	scriptPath := filepath.Join(stageDir, "self-update.sh")
 	if err := os.WriteFile(scriptPath, []byte(selfUpdateScript()), 0o700); err != nil {
-		return err
+		return apperr.FromOS(err, "selfupdate.script")
 	}
 
 	command := exec.Command(
@@ -63,7 +92,7 @@ func startReplaceScript(stagedApp, targetApp, stageDir string) error {
 	// 新会话：启动器马上要退出，脚本必须脱离父进程继续跑完替换。
 	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := command.Start(); err != nil {
-		return fmt.Errorf("启动更新脚本失败：%w", err)
+		return apperr.New(apperr.KindInternal, "selfupdate.script", "启动更新程序失败，请手动下载安装", err)
 	}
 	return nil
 }

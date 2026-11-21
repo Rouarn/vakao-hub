@@ -1,18 +1,22 @@
 package install
 
-import "errors"
+import (
+	"context"
+
+	"vakaohub/launcher/internal/apperr"
+)
 
 // Install 按产物格式执行平台安装，返回可启动路径（可能为空）。
 // installDir 是用户配置的安装目录，空串表示使用平台默认目录；
 // targetPath 非空表示升级已有安装，保持原位置。
-func Install(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
-	return installLocal(format, filePath, appKey, appName, targetPath, installDir)
+func Install(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
+	return installLocal(ctx, format, filePath, appKey, appName, targetPath, installDir)
 }
 
 // Remove 删除已安装应用（仅允许平台约定的安装目录）。
 func Remove(path string) error {
 	if path == "" {
-		return errors.New("没有记录安装路径，无法自动卸载")
+		return apperr.New(apperr.KindInternal, "uninstall", "没有记录安装路径，无法自动卸载", nil)
 	}
 	return removeLocal(path)
 }
@@ -20,7 +24,7 @@ func Remove(path string) error {
 // Launch 启动已安装应用。
 func Launch(path string) error {
 	if path == "" {
-		return errors.New("该安装方式未记录启动路径，请手动启动")
+		return apperr.New(apperr.KindInternal, "launch", "该安装方式未记录启动路径，请手动启动", nil)
 	}
 	return launchLocal(path)
 }

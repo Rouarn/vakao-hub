@@ -16,9 +16,11 @@
     />
 
     <main ref="contentRef" class="content">
-      <div v-if="error" class="banner">
-        <span>{{ error }}</span>
-        <button @click="load">重试</button>
+      <div v-if="errorInfo && errorInfo.kind !== 'canceled'" class="banner">
+        <span>{{ errorInfo.message }}</span>
+        <button v-if="activeInstall" @click="cancelInstall">取消安装</button>
+        <button v-else-if="canRetry" @click="retryLast">重试</button>
+        <button @click="openLog">打开日志</button>
       </div>
 
       <div v-if="loading && !apps.length" class="empty">正在读取软件目录…</div>
@@ -131,6 +133,8 @@ import {
 import type { AppView, Progress, Settings } from '../bindings/vakaohub/launcher/internal/service';
 import { InstallProgress } from '../bindings/events';
 import { SELF_APP_KEY } from './lib/constants';
+import type { UserError } from './lib/errors';
+import { toUserError } from './lib/errors';
 import type { DetailMeta } from './lib/meta';
 
 import AppCard from './components/AppCard.vue';
@@ -167,7 +171,10 @@ const settings = ref<Settings>({ baseUrl: '', installDir: '' });
 const loading = ref(false);
 const saving = ref(false);
 const updatingAll = ref(false);
-const error = ref('');
+const errorInfo = ref<UserError | null>(null);
+const activeInstall = ref<{ appKey: string; cancel: () => void } | null>(null);
+const canRetry = ref(false);
+let retryAction: (() => Promise<void>) | null = null;
 const busyKeys = ref<Record<string, boolean>>({});
 const progress = ref<Record<string, Progress>>({});
 const settingsVisible = ref(false);
@@ -274,9 +281,43 @@ let refreshTimer: number | undefined;
 let clockTimer: number | undefined;
 let offProgress: (() => void) | undefined;
 
+function clearError(): void {
+  errorInfo.value = null;
+  canRetry.value = false;
+  retryAction = null;
+}
+
+function showError(cause: unknown, retry?: () => Promise<void>): void {
+  const info = toUserError(cause);
+  if (info.kind === 'canceled') return;
+  errorInfo.value = info;
+  retryAction = info.retryable && retry ? retry : null;
+  canRetry.value = Boolean(retryAction);
+}
+
+function showMessage(message: string): void {
+  errorInfo.value = { code: 'E_INTERNAL', kind: 'internal', retryable: false, message };
+  canRetry.value = false;
+  retryAction = null;
+}
+
+function retryLast(): void {
+  void retryAction?.();
+}
+
+function cancelInstall(): void {
+  const current = activeInstall.value;
+  activeInstall.value = null;
+  current?.cancel();
+}
+
+function openLog(): void {
+  void LauncherService.OpenLog().catch(() => undefined);
+}
+
 async function load(): Promise<void> {
   loading.value = true;
-  error.value = '';
+  clearError();
   try {
     launcherVersion.value = (await LauncherService.GetAppVersion()) || 'dev';
     settings.value = await SettingsService.GetSettings();
@@ -288,8 +329,9 @@ async function load(): Promise<void> {
     hostOsVersion.value = catalog.osVersion ?? '';
     serviceOnline.value = true;
   } catch (cause) {
-    error.value = (cause as Error).message;
     serviceOnline.value = false;
+    // 后台自动刷新撞上安装/卸载时静默跳过，不打扰用户。
+    if (toUserError(cause).kind !== 'busy') showError(cause, load);
   } finally {
     loading.value = false;
     lastCheckedAt.value = Date.now();
@@ -310,22 +352,25 @@ async function install(app: AppView): Promise<void> {
   const selfUpdate = app.appKey === SELF_APP_KEY;
   if (app.running && !selfUpdate) return;
   if (!supportsOs(app)) {
-    error.value = `该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`;
+    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
     return;
   }
   menuKey.value = '';
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
-  error.value = '';
+  clearError();
+  const call = InstallService.Install(app.appKey, app.artifactID);
+  activeInstall.value = { appKey: app.appKey, cancel: () => call.cancel() };
   try {
-    await InstallService.Install(app.appKey, app.artifactID);
+    await call;
     if (selfUpdate) {
       restartForSelfUpdate();
       return;
     }
     await load();
   } catch (cause) {
-    error.value = (cause as Error).message;
+    showError(cause, () => install(app));
   } finally {
+    if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
     const next = { ...busyKeys.value };
     delete next[app.appKey];
     busyKeys.value = next;
@@ -364,7 +409,7 @@ function supportsOs(app: AppView): boolean {
 
 async function primaryAction(app: AppView): Promise<void> {
   if (!supportsOs(app)) {
-    error.value = `该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`;
+    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
     return;
   }
   // 已在运行的应用不再执行打开；启动器自身只在「有更新」时走自更新替换。
@@ -398,7 +443,7 @@ async function confirmUninstall(): Promise<void> {
 async function uninstall(app: AppView, deleteData: boolean): Promise<void> {
   if (app.running) return;
   menuKey.value = '';
-  error.value = '';
+  clearError();
   try {
     await InstallService.Uninstall(app.appKey, deleteData);
     const next = { ...progress.value };
@@ -406,17 +451,17 @@ async function uninstall(app: AppView, deleteData: boolean): Promise<void> {
     progress.value = next;
     await load();
   } catch (cause) {
-    error.value = (cause as Error).message;
+    showError(cause, () => uninstall(app, deleteData));
   }
 }
 
 async function launch(app: AppView): Promise<void> {
   menuKey.value = '';
-  error.value = '';
+  clearError();
   try {
     await CatalogService.Launch(app.appKey);
   } catch (cause) {
-    error.value = (cause as Error).message;
+    showError(cause, () => launch(app));
   }
 }
 
@@ -475,20 +520,21 @@ async function chooseInstallDir(): Promise<void> {
     const dir = await InstallService.SelectInstallDir();
     if (dir) draftInstallDir.value = dir;
   } catch (cause) {
-    settingsError.value = (cause as Error).message;
+    const info = toUserError(cause);
+    settingsError.value = info.kind === 'canceled' ? '' : info.message;
   }
 }
 
 async function saveSettings(): Promise<void> {
   saving.value = true;
-  error.value = '';
+  clearError();
   settingsError.value = '';
   try {
     settings.value = await SettingsService.SaveSettings(draftBaseUrl.value, draftInstallDir.value);
     settingsVisible.value = false;
     await load();
   } catch (cause) {
-    settingsError.value = (cause as Error).message;
+    settingsError.value = toUserError(cause).message;
   } finally {
     saving.value = false;
   }
@@ -496,9 +542,9 @@ async function saveSettings(): Promise<void> {
 
 function reveal(app: AppView): Promise<void> {
   menuKey.value = '';
-  error.value = '';
+  clearError();
   return CatalogService.Reveal(app.appKey).catch((cause: unknown) => {
-    error.value = (cause as Error).message;
+    showError(cause, () => reveal(app));
   });
 }
 
@@ -546,10 +592,8 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 function onProgress(payload: Progress): void {
+  // 错误以 Promise 拒绝为准，这里只更新进度，避免 canceled 被当成错误弹窗。
   progress.value = { ...progress.value, [payload.appKey]: payload };
-  if (payload.phase === 'error') {
-    error.value = payload.message;
-  }
 }
 
 function restartRefreshTimer(): void {

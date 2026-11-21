@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestSMOKECatalogAndInstall(t *testing.T) {
 	catalogService := NewCatalog(host)
 	installService := NewInstall(host)
 
-	catalog, err := catalogService.GetCatalog()
+	catalog, err := catalogService.GetCatalog(context.Background())
 	if err != nil {
 		t.Fatalf("GetCatalog: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestSMOKECatalogAndInstall(t *testing.T) {
 		t.Fatal("wiredeck not found in darwin catalog")
 	}
 
-	item, err := installService.Install("wiredeck", target.ArtifactID)
+	item, err := installService.Install(context.Background(), "wiredeck", target.ArtifactID)
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}

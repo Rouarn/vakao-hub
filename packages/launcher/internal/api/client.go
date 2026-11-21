@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"vakaohub/launcher/internal/apperr"
 )
 
 type Client struct {
@@ -39,35 +41,41 @@ func (c *Client) Catalog(ctx context.Context, platform, arch string) (CatalogRes
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return CatalogResponse{}, err
+		return CatalogResponse{}, apperr.New(
+			apperr.KindInternal,
+			"catalog.request",
+			"服务地址无效，请在设置中检查服务地址",
+			err,
+		)
 	}
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return CatalogResponse{}, fmt.Errorf("无法连接分发服务：%w", err)
+		return CatalogResponse{}, apperr.FromContext(err, "catalog")
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(response.Body, 8<<20))
 	if err != nil {
-		return CatalogResponse{}, err
+		return CatalogResponse{}, apperr.FromContext(err, "catalog.read")
 	}
 
 	var payload envelope
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return CatalogResponse{}, fmt.Errorf("服务返回格式异常（HTTP %d）", response.StatusCode)
+		return CatalogResponse{}, apperr.FromHTTPStatus(response.StatusCode, "catalog.decode", "")
 	}
-	if response.StatusCode != http.StatusOK || payload.Code != 200 {
-		message := payload.Message
-		if message == "" {
-			message = fmt.Sprintf("HTTP %d", response.StatusCode)
+	if response.StatusCode != http.StatusOK || payload.Code != http.StatusOK {
+		status := response.StatusCode
+		// 2xx 但业务码失败：按不可重试的请求错误处理，不把 200 当成 5xx。
+		if status < http.StatusBadRequest {
+			status = http.StatusBadRequest
 		}
-		return CatalogResponse{}, fmt.Errorf("服务返回错误：%s", message)
+		return CatalogResponse{}, apperr.FromHTTPStatus(status, "catalog", payload.Message)
 	}
 
 	var catalog CatalogResponse
 	if err := json.Unmarshal(payload.Data, &catalog); err != nil {
-		return CatalogResponse{}, err
+		return CatalogResponse{}, apperr.FromHTTPStatus(response.StatusCode, "catalog.decode", "")
 	}
 	return catalog, nil
 }

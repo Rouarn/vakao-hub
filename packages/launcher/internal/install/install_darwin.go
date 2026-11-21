@@ -3,24 +3,32 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
+	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/contract"
 )
 
-func installLocal(format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
+func installLocal(ctx context.Context, format, filePath, appKey, appName, targetPath, installDir string) (string, error) {
 	switch format {
 	case contract.FormatDMG:
-		return installDMG(filePath, targetPath, installDir)
+		return installDMG(ctx, filePath, targetPath, installDir)
 	case contract.FormatZIP:
-		return installZip(filePath, targetPath, installDir)
+		return installZip(ctx, filePath, targetPath, installDir)
 	default:
-		return "", fmt.Errorf("macOS 暂不支持 %s 格式，请上传 dmg 或 zip", format)
+		return "", apperr.New(
+			apperr.KindUnsupported,
+			"install.format",
+			"该格式不支持自动安装，请上传 dmg 或 zip",
+			nil,
+		)
 	}
 }
 
@@ -58,86 +66,105 @@ func ValidateInstallDir(dir string) error {
 		return nil
 	}
 	if !filepath.IsAbs(dir) {
-		return fmt.Errorf("安装目录必须是绝对路径")
+		return apperr.New(apperr.KindInternal, "install.dir", "安装目录必须是绝对路径", nil)
 	}
 	if !allowedInstallDir(dir) {
-		return fmt.Errorf("只能选择用户主目录内或 /Applications 下的目录")
+		return apperr.New(apperr.KindPermission, "install.dir", "只能选择用户主目录内或 /Applications 下的目录", nil)
 	}
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return fmt.Errorf("安装目录不存在：%s", dir)
+		return apperr.New(apperr.KindInternal, "install.dir", fmt.Sprintf("安装目录不存在：%s", dir), err)
 	}
 	if err := syscall.Access(dir, 0x2 /* W_OK */); err != nil {
-		return fmt.Errorf("安装目录不可写：%s", dir)
+		return apperr.New(apperr.KindPermission, "install.dir", "", err)
 	}
 	return nil
 }
 
 // scanInstallDir 是用户配置的安装目录，参与已安装应用扫描。
-var scanInstallDir string
+var (
+	scanDirMu      sync.RWMutex
+	scanInstallDir string
+)
 
 // SetInstallDir 记住配置的安装目录并失效扫描缓存；传空串恢复默认。
 func SetInstallDir(dir string) {
+	scanDirMu.Lock()
 	scanInstallDir = ExpandDir(dir)
+	scanDirMu.Unlock()
 	InvalidateIndex()
 }
 
-func installZip(filePath, targetPath, installDir string) (string, error) {
-	tmp, err := os.MkdirTemp("", "vakaohub-unzip-*")
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(tmp)
-
-	appPath, err := ExtractApp(contract.FormatZIP, filePath, tmp)
-	if err != nil {
-		return "", err
-	}
-	return copyToApplications(appPath, targetPath, installDir)
+func configuredInstallDir() string {
+	scanDirMu.RLock()
+	defer scanDirMu.RUnlock()
+	return scanInstallDir
 }
 
-func installDMG(filePath, targetPath, installDir string) (string, error) {
-	tmp, err := os.MkdirTemp("", "vakaohub-dmg-*")
+func installZip(ctx context.Context, filePath, targetPath, installDir string) (string, error) {
+	tmp, err := os.MkdirTemp("", "vakaohub-unzip-*")
 	if err != nil {
-		return "", err
+		return "", apperr.FromOS(err, "install.extract")
 	}
 	defer os.RemoveAll(tmp)
 
-	appPath, err := ExtractApp(contract.FormatDMG, filePath, tmp)
+	appPath, err := ExtractApp(ctx, contract.FormatZIP, filePath, tmp)
 	if err != nil {
 		return "", err
 	}
-	return copyToApplications(appPath, targetPath, installDir)
+	return copyToApplications(ctx, appPath, targetPath, installDir)
+}
+
+func installDMG(ctx context.Context, filePath, targetPath, installDir string) (string, error) {
+	tmp, err := os.MkdirTemp("", "vakaohub-dmg-*")
+	if err != nil {
+		return "", apperr.FromOS(err, "install.extract")
+	}
+	defer os.RemoveAll(tmp)
+
+	appPath, err := ExtractApp(ctx, contract.FormatDMG, filePath, tmp)
+	if err != nil {
+		return "", err
+	}
+	return copyToApplications(ctx, appPath, targetPath, installDir)
 }
 
 // ExtractApp 把安装包里的 .app 解到 dest，返回解出的 .app 路径。
 // zip 直接解压；dmg 先临时挂载再把 .app 复制出来，挂载点用完即卸载。
-func ExtractApp(format, filePath, dest string) (string, error) {
+func ExtractApp(ctx context.Context, format, filePath, dest string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", apperr.FromContext(err, "extract")
+	}
+	ctx, cancel := context.WithTimeout(ctx, extractTimeout)
+	defer cancel()
+
 	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return "", err
+		return "", apperr.FromOS(err, "extract")
 	}
 
 	switch format {
 	case contract.FormatZIP:
-		if output, err := exec.Command("ditto", "-x", "-k", filePath, dest).CombinedOutput(); err != nil {
-			return "", fmt.Errorf("解压失败：%v %s", err, strings.TrimSpace(string(output)))
+		output, err := exec.CommandContext(ctx, "ditto", "-x", "-k", filePath, dest).CombinedOutput()
+		if err != nil {
+			return "", commandFailure(ctx, apperr.KindCorrupt, "extract.zip", "安装包损坏或解压失败，请重试", err, output)
 		}
 		return findApp(dest)
 	case contract.FormatDMG:
 		mountPoint, err := os.MkdirTemp("", "vakaohub-dmg-*")
 		if err != nil {
-			return "", err
+			return "", apperr.FromOS(err, "extract.dmg")
 		}
 		defer os.RemoveAll(mountPoint)
 
-		attach := exec.Command(
+		attach := exec.CommandContext(
+			ctx,
 			"hdiutil", "attach",
 			"-nobrowse", "-readonly", "-quiet",
 			"-mountpoint", mountPoint,
 			filePath,
 		)
 		if output, err := attach.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("挂载 DMG 失败：%v %s", err, strings.TrimSpace(string(output)))
+			return "", commandFailure(ctx, apperr.KindCorrupt, "extract.dmg", "挂载安装包失败，请重试", err, output)
 		}
 		defer func() {
 			_ = exec.Command("hdiutil", "detach", mountPoint, "-force").Run()
@@ -148,12 +175,18 @@ func ExtractApp(format, filePath, dest string) (string, error) {
 			return "", err
 		}
 		target := filepath.Join(dest, filepath.Base(appPath))
-		if output, err := exec.Command("ditto", appPath, target).CombinedOutput(); err != nil {
-			return "", fmt.Errorf("复制应用失败：%v %s", err, strings.TrimSpace(string(output)))
+		output, err := exec.CommandContext(ctx, "ditto", appPath, target).CombinedOutput()
+		if err != nil {
+			return "", commandFailure(ctx, apperr.KindInternal, "extract.dmg", "复制应用失败，请检查安装目录后重试", err, output)
 		}
 		return target, nil
 	default:
-		return "", fmt.Errorf("macOS 暂不支持 %s 格式，请上传 dmg 或 zip", format)
+		return "", apperr.New(
+			apperr.KindUnsupported,
+			"extract.format",
+			"该格式不支持自动安装，请上传 dmg 或 zip",
+			nil,
+		)
 	}
 }
 
@@ -173,44 +206,64 @@ func findApp(root string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return "", apperr.FromOS(err, "extract.find")
 	}
 	if found == "" {
-		return "", fmt.Errorf("安装包内未找到 .app")
+		return "", apperr.New(apperr.KindCorrupt, "extract.find", "安装包内未找到 .app，请重试", nil)
 	}
 	return found, nil
 }
 
 // copyToApplications 把解出的 .app 放进安装目录。
 // targetPath 非空表示升级已有安装：保持原位置不搬家，但该位置仍须在允许范围内。
-func copyToApplications(appPath, targetPath, installDir string) (string, error) {
+func copyToApplications(ctx context.Context, appPath, targetPath, installDir string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", apperr.FromContext(err, "install.copy")
+	}
+	ctx, cancel := context.WithTimeout(ctx, extractTimeout)
+	defer cancel()
+
 	dir := ExpandDir(installDir)
 	if dir == "" {
 		dir = DefaultInstallDir()
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return "", apperr.FromOS(err, "install.copy")
 	}
 
 	target := filepath.Join(dir, filepath.Base(appPath))
 	if targetPath != "" {
 		clean := filepath.Clean(targetPath)
 		if !allowedInstallDir(filepath.Dir(clean)) {
-			return "", fmt.Errorf("安装路径不在允许的安装目录内：%s", targetPath)
+			return "", apperr.New(
+				apperr.KindPermission,
+				"install.copy",
+				fmt.Sprintf("安装路径不在允许的安装目录内：%s", targetPath),
+				nil,
+			)
 		}
 		target = clean
 	}
 	if err := os.RemoveAll(target); err != nil {
-		return "", err
+		return "", apperr.FromOS(err, "install.copy")
 	}
-	if output, err := exec.Command("ditto", appPath, target).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("复制应用到 %s 失败：%v %s", filepath.Dir(target), err, strings.TrimSpace(string(output)))
+	output, err := exec.CommandContext(ctx, "ditto", appPath, target).CombinedOutput()
+	if err != nil {
+		return "", commandFailure(
+			ctx,
+			apperr.KindInternal,
+			"install.copy",
+			fmt.Sprintf("复制应用到 %s 失败，请检查安装目录后重试", filepath.Dir(target)),
+			err,
+			output,
+		)
 	}
 
 	// 代码签名完整性校验（ad-hoc 签名也会通过；未签名或签名损坏会被拒绝）
-	if output, err := exec.Command("codesign", "--verify", "--deep", "--strict", target).CombinedOutput(); err != nil {
+	output, err = exec.CommandContext(ctx, "codesign", "--verify", "--deep", "--strict", target).CombinedOutput()
+	if err != nil {
 		_ = os.RemoveAll(target)
-		return "", fmt.Errorf("代码签名校验失败：%v %s", err, strings.TrimSpace(string(output)))
+		return "", commandFailure(ctx, apperr.KindSignature, "install.signature", "", err, output)
 	}
 	return target, nil
 }
@@ -218,33 +271,51 @@ func copyToApplications(appPath, targetPath, installDir string) (string, error) 
 func removeLocal(path string) error {
 	clean := filepath.Clean(path)
 	if filepath.Ext(clean) != ".app" {
-		return fmt.Errorf("拒绝删除非 .app 路径：%s", path)
+		return apperr.New(apperr.KindInternal, "uninstall", fmt.Sprintf("拒绝删除非 .app 路径：%s", path), nil)
 	}
 	// 自定义安装目录会随设置变化，因此不再列举固定根目录，
 	// 而是校验父目录在允许范围内，并确认目标确实是完整的应用包。
 	if !allowedInstallDir(filepath.Dir(clean)) {
-		return fmt.Errorf("拒绝删除用户主目录与 /Applications 之外的路径")
+		return apperr.New(apperr.KindPermission, "uninstall", "拒绝删除用户主目录与 /Applications 之外的路径", nil)
 	}
 	if _, err := os.Stat(filepath.Join(clean, "Contents", "Info.plist")); err != nil {
-		return fmt.Errorf("目标不是有效的应用包：%s", path)
+		return apperr.New(apperr.KindCorrupt, "uninstall", fmt.Sprintf("目标不是有效的应用包：%s", path), err)
 	}
-	return os.RemoveAll(clean)
+	if err := os.RemoveAll(clean); err != nil {
+		return apperr.FromOS(err, "uninstall")
+	}
+	return nil
 }
 
 func launchLocal(path string) error {
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path)
+		return apperr.New(
+			apperr.KindInternal,
+			"launch",
+			fmt.Sprintf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path),
+			err,
+		)
 	}
 	output, err := exec.Command("open", path).CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(output))
 		if strings.Contains(message, "does not exist") || strings.Contains(message, "No such file") {
-			return fmt.Errorf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path)
+			return apperr.New(
+				apperr.KindInternal,
+				"launch",
+				fmt.Sprintf("应用已不在原安装位置（%s），请刷新后重试或重新安装", path),
+				fmt.Errorf("%w: %s", err, message),
+			)
 		}
 		if strings.Contains(message, "not allowed") || strings.Contains(message, "cannot be opened") {
-			return fmt.Errorf("系统阻止了启动（Gatekeeper）：请在 Finder 中右键点击应用选择「打开」，或到 系统设置 → 隐私与安全性 选择「仍要打开」")
+			return apperr.New(
+				apperr.KindPermission,
+				"launch",
+				"系统阻止了启动（Gatekeeper）：请在 Finder 中右键点击应用选择「打开」，或到 系统设置 → 隐私与安全性 选择「仍要打开」",
+				fmt.Errorf("%w: %s", err, message),
+			)
 		}
-		return fmt.Errorf("启动失败：%v %s", err, message)
+		return apperr.New(apperr.KindInternal, "launch", "启动失败，请稍后重试", fmt.Errorf("%w: %s", err, message))
 	}
 	return nil
 }

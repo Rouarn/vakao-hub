@@ -4,9 +4,12 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/logging"
 	"vakaohub/launcher/internal/service"
 	launcherversion "vakaohub/launcher/internal/version"
 )
@@ -24,9 +27,16 @@ func main() {
 		return
 	}
 
+	if path, err := logging.Setup(); err != nil {
+		log.Printf("初始化日志失败：%v", err)
+	} else {
+		slog.Info("launcher started", "version", launcherversion.Version, "log", path)
+	}
+
 	app := application.New(application.Options{
-		Name:        "VaKao Hub",
-		Description: "VaKao Hub Launcher",
+		Name:         "VaKao Hub",
+		Description:  "VaKao Hub Launcher",
+		MarshalError: apperr.Marshal,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
