@@ -3,10 +3,8 @@
 package install
 
 import (
-	"archive/zip"
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,62 +49,12 @@ func installZip(ctx context.Context, filePath, appKey string) (string, error) {
 	}
 	defer os.RemoveAll(stage)
 
-	reader, err := zip.OpenReader(filePath)
-	if err != nil {
-		return "", apperr.New(apperr.KindCorrupt, "install.zip", "", err)
-	}
-	defer reader.Close()
-
-	for _, file := range reader.File {
-		if err := ctx.Err(); err != nil {
-			return "", apperr.FromContext(err, "install.zip")
-		}
-		name := filepath.Join(stage, file.Name)
-		if !strings.HasPrefix(name, stage+string(os.PathSeparator)) {
-			return "", apperr.New(apperr.KindCorrupt, "install.zip", "安装包包含非法路径，请重试", nil)
-		}
-		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(name, 0o755); err != nil {
-				return "", apperr.FromOS(err, "install.zip")
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-			return "", apperr.FromOS(err, "install.zip")
-		}
-		source, err := file.Open()
-		if err != nil {
-			return "", apperr.New(apperr.KindCorrupt, "install.zip", "", err)
-		}
-		destination, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, file.Mode())
-		if err != nil {
-			source.Close()
-			return "", apperr.FromOS(err, "install.zip")
-		}
-		copyErr := copyWithContext(ctx, destination, source)
-		source.Close()
-		destination.Close()
-		if copyErr != nil {
-			return "", apperr.FromContext(copyErr, "install.zip")
-		}
-	}
-
-	rollback, err := swapDirectory(stage, target)
-	if err != nil {
+	if err := extractZipTo(ctx, filePath, stage); err != nil {
 		return "", err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = rollback()
-		}
-	}()
-	if _, err := os.Stat(target); err != nil {
-		return "", apperr.FromOS(err, "install.swap")
-	}
-	committed = true
-	if err := atomicfs.CleanupBackups(target); err != nil {
-		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
+
+	if err := commitStage(stage, target); err != nil {
+		return "", err
 	}
 	return target, nil
 }
@@ -135,22 +83,8 @@ func installAppImage(ctx context.Context, filePath, installDir string) (string, 
 		return "", apperr.FromOS(err, "install.appimage")
 	}
 
-	rollback, err := swapDirectory(staged, target)
-	if err != nil {
+	if err := commitStage(staged, target); err != nil {
 		return "", err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = rollback()
-		}
-	}()
-	if _, err := os.Stat(target); err != nil {
-		return "", apperr.FromOS(err, "install.swap")
-	}
-	committed = true
-	if err := atomicfs.CleanupBackups(target); err != nil {
-		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
 	}
 	return target, nil
 }

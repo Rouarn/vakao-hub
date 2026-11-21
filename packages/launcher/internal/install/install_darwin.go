@@ -5,7 +5,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,23 +94,8 @@ func installBundle(ctx context.Context, format, filePath, targetPath, installDir
 		target = filepath.Join(dir, filepath.Base(stagedApp))
 	}
 
-	rollback, err := swapDirectory(stagedApp, target)
-	if err != nil {
+	if err := commitStage(stagedApp, target); err != nil {
 		return "", err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = rollback()
-		}
-	}()
-
-	if _, err := os.Stat(target); err != nil {
-		return "", apperr.FromOS(err, "install.swap")
-	}
-	committed = true
-	if err := atomicfs.CleanupBackups(target); err != nil {
-		slog.Warn("清理旧版本备份失败", "target", target, "error", err)
 	}
 	return target, nil
 }

@@ -137,11 +137,6 @@ func scanInstalledApps() []installedApp {
 	return apps
 }
 
-func normalizeName(value string) string {
-	replacer := strings.NewReplacer(" ", "", "-", "", "_", "", ".", "")
-	return strings.ToLower(replacer.Replace(value))
-}
-
 func plistValue(appPath, key string) string {
 	info := filepath.Join(appPath, "Contents", "Info.plist")
 	output, err := exec.Command("plutil", "-extract", key, "raw", "-o", "-", info).Output()

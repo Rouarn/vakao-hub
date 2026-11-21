@@ -107,8 +107,3 @@ func findFirstExecutable(dir string) (string, bool) {
 	})
 	return found, found != ""
 }
-
-func normalizeName(value string) string {
-	replacer := strings.NewReplacer(" ", "", "-", "", "_", "", ".", "")
-	return strings.ToLower(replacer.Replace(value))
-}
