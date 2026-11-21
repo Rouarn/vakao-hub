@@ -25,8 +25,11 @@ wails3 task darwin:package APP_VERSION="$VERSION"
 # 产物
 bin/VaKaoHub.app
 
-# 发布（含版本一致、签名、归档门禁；--dry-run 只检查不上传）
+# 发布（含版本一致、签名、归档结构与发布后复核门禁；--dry-run 只检查不上传）
 ./ship.sh --dry-run
+
+# 复用 bin/ 里已有产物时用 --no-build；归档与当前 .app 不一致会被门禁拒绝
+./ship.sh --no-build
 ```
 
 `build/darwin/Info.plist`、`build/windows/info.json` 等属于生成物，不要手改；改版本只改 `build/config.yml`，再运行 `common:update:build-assets`。

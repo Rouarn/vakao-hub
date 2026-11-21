@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // 发布门禁：所有 workflow 只允许 workflow_dispatch 手动触发。
 // 私有仓库 Actions 额度已用完，push / pull_request / schedule / workflow_run 会造成持续失败。
+// ship.sh 在构建前调用本脚本（见 ship.sh 门禁处的注释）：先快速拦住触发方式违规，再开始编译。
+// 这是额度约束的守门，不是遗留 bug，后续不要改成自动触发，也不要把调用顺序挪到构建之后。
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

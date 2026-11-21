@@ -33,8 +33,9 @@ node tools/hub-cli.mjs release \
 
 - `--file` 可重复，每个 `--file` 后面跟它自己的 `--platform/--arch/--format/--min-os`
 - 版本已存在时**复用**，不会重复建；产物会重新上传
-- 默认全量发布；`--publish gray --gray-percent 10` 灰度；`--no-publish` 只上传不发布
-- `--dry-run` 只打印计划，不写任何东西
+- 发布模式只接受 `--publish full`（默认）、`--publish gray --gray-percent 10`、`--publish none`；拼写错误或 `--publish=full` 这类等号写法会直接报错退出，不会静默升级为全量
+- 发布接口返回 `success: false` 时 CLI 退非零，不再只打印响应
+- `auth-check` 只检查凭据来源，供发布脚本在构建前快速失败；`status --app <key> --version <v> [--expect full|gray]` 用于发布后复核版本状态
 
 ## 接入到项目里
 
@@ -60,4 +61,4 @@ CLI 路径可用 `HUB_CLI` 环境变量覆盖。
 | DianMo             | `Scripts/ship.sh`           | apk（Gradle）               |
 | 小绿记账           | `scripts/ship.sh`           | apk（HBuilderX 打好后上传） |
 
-统一支持 `--no-build`（跳过构建只上传）、`--dry-run`（只看计划）、`--no-publish`（只传不发）。
+统一支持 `--no-build`（跳过构建只上传）、`--dry-run`（只看计划）、`--no-publish` / `--publish none`（只传不发）。
