@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -167,12 +168,18 @@ func loadSettings() Settings {
 	// 同时记录原因，启动后明确提示用户，不能无声回退。
 	settings.InstallDir = strings.TrimSpace(settings.InstallDir)
 	if err := install.ValidateInstallDir(settings.InstallDir); err != nil {
+		label := "安装目录"
+		if runtime.GOOS == "windows" {
+			label = "便携应用目录"
+		}
 		startupNotice = fmt.Sprintf(
-			"上次保存的安装目录「%s」不可用（%v），已改用默认目录，请重新选择并保存。",
-			settings.InstallDir, err,
+			"上次保存的%s「%s」不可用（%v），已改用默认目录，请重新选择并保存。",
+			label, settings.InstallDir, err,
 		)
 		settings.InstallDir = ""
 	}
+	// 启动时同步给 install 包，供残留清理覆盖用户自定义目录。
+	install.SetInstallDir(settings.InstallDir)
 	return settings
 }
 
