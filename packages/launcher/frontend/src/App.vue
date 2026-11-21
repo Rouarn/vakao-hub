@@ -53,6 +53,7 @@
               :updating-all="updatingAll"
               :supports-os="supportsOs(app)"
               :menu-open="menuKey === app.appKey"
+              :platform-label="platformLabel"
               :progress="progress[app.appKey]"
               @open-detail="openDetail"
               @primary-action="primaryAction"
@@ -60,6 +61,7 @@
               @launch="launch"
               @reveal="reveal"
               @install="install"
+              @bind-path="bindPath"
               @open-url="openUrl"
               @request-uninstall="requestUninstall"
             />
@@ -86,6 +88,7 @@
       @launch="launch"
       @reveal="reveal"
       @install="install"
+      @bind-path="bindPath"
       @open-url="openUrl"
       @request-uninstall="requestUninstall"
     />
@@ -131,8 +134,16 @@
     <UninstallDialog
       v-model:delete-data="deleteUninstallData"
       :target="uninstallTarget"
+      :platform-label="platformLabel"
       @close="uninstallTarget = null"
       @confirm="confirmUninstall"
+    />
+
+    <InstallChoiceDialog
+      :target="installChoiceTarget"
+      :message="installChoiceMessage"
+      @cancel="cancelInstallChoice"
+      @choose="chooseInstallMode"
     />
   </div>
 </template>
@@ -155,6 +166,7 @@ import type { DetailMeta } from './lib/meta';
 
 import AppCard from './components/AppCard.vue';
 import AppDetailPanel from './components/AppDetailPanel.vue';
+import InstallChoiceDialog from './components/InstallChoiceDialog.vue';
 import LauncherHeader from './components/LauncherHeader.vue';
 import RunningDialog from './components/RunningDialog.vue';
 import SettingsModal from './components/SettingsModal.vue';
@@ -209,11 +221,14 @@ const deleteUninstallData = ref(false);
 const runningTarget = ref<AppView | null>(null);
 const runningMessage = ref('');
 const quitting = ref(false);
+// 分类不确定时让用户选择「便携复制」还是「交给安装程序」，选择后继续同一次安装。
+const installChoiceTarget = ref<AppView | null>(null);
+const installChoiceMessage = ref('');
 const draftBaseUrl = ref('');
 const draftInstallDir = ref('');
-const defaultInstallDir = ref('~/Applications');
-// Windows 的安装位置由安装包决定，设置项只展示不可编辑。
-const installDirEditable = computed(() => platform.value === 'darwin');
+const defaultInstallDir = ref('');
+// macOS 与 Windows 都可以选：macOS 是应用安装目录，Windows 是便携应用目录。
+const installDirEditable = computed(() => platform.value === 'darwin' || platform.value === 'win32');
 const search = ref('');
 const sortBy = ref<'recent' | 'name' | 'status'>('recent');
 const gridMode = ref(true);
@@ -385,7 +400,7 @@ async function load(): Promise<void> {
   }
 }
 
-async function install(app: AppView): Promise<void> {
+async function install(app: AppView, mode?: 'portable' | 'installer'): Promise<void> {
   // 启动器自身走自更新替换流程，允许在运行中执行；其它运行中的应用由主进程检测并返回 running。
   const selfUpdate = app.appKey === SELF_APP_KEY;
   if (!supportsOs(app)) {
@@ -395,7 +410,9 @@ async function install(app: AppView): Promise<void> {
   menuKey.value = '';
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
   clearError();
-  const call = InstallService.Install(app.appKey, app.artifactID);
+  const call = mode
+    ? InstallService.InstallWithMode(app.appKey, app.artifactID, mode)
+    : InstallService.Install(app.appKey, app.artifactID);
   activeInstall.value = { appKey: app.appKey, name: app.name, cancel: () => call.cancel() };
   try {
     await call;
@@ -406,19 +423,37 @@ async function install(app: AppView): Promise<void> {
     await load();
   } catch (cause) {
     const info = toUserError(cause);
+    if (info.kind === 'choice') {
+      // 主进程已保留下载好的产物，用户选完直接继续，不会重新下载。
+      installChoiceTarget.value = app;
+      installChoiceMessage.value = info.message;
+      return;
+    }
     if (info.kind === 'running' && !selfUpdate) {
       // 首次命中不结束进程，先让用户确认；确认后走 QuitAppsAndInstall 继续这次更新。
       runningTarget.value = app;
       runningMessage.value = info.message;
       return;
     }
-    showError(cause, () => install(app));
+    showError(cause, () => install(app, mode));
   } finally {
     if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
     const next = { ...busyKeys.value };
     delete next[app.appKey];
     busyKeys.value = next;
   }
+}
+
+function cancelInstallChoice(): void {
+  installChoiceTarget.value = null;
+  installChoiceMessage.value = '';
+}
+
+// 用户选完安装方式后继续同一次安装；mode 会一路传到主进程的安装器分支。
+function chooseInstallMode(mode: 'portable' | 'installer'): void {
+  const target = installChoiceTarget.value;
+  cancelInstallChoice();
+  if (target) void install(target, mode);
 }
 
 function closeRunningDialog(): void {
@@ -488,6 +523,10 @@ async function primaryAction(app: AppView): Promise<void> {
     showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
     return;
   }
+  if (app.installPending) {
+    showMessage('安装程序已启动，正在等待系统登记；完成安装向导后点刷新即可');
+    return;
+  }
   // 已在运行的应用不执行打开；有更新时进入安装流程，由主进程决定是否需要先退出。
   if (app.running) {
     if (app.hasUpdate) {
@@ -538,6 +577,19 @@ async function launch(app: AppView): Promise<void> {
     await CatalogService.Launch(app.appKey);
   } catch (cause) {
     showError(cause, () => launch(app));
+  }
+}
+
+// 手动指定主程序：用于安装器写注册表的名字对不上、或绿色软件放在别处的情况。
+async function bindPath(app: AppView): Promise<void> {
+  menuKey.value = '';
+  clearError();
+  try {
+    await InstallService.BindInstalledPath(app.appKey, app.name);
+    await load();
+  } catch (cause) {
+    if (toUserError(cause).kind === 'canceled') return;
+    showError(cause, () => bindPath(app));
   }
 }
 
@@ -692,6 +744,8 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape') return;
   if (runningTarget.value) {
     closeRunningDialog();
+  } else if (installChoiceTarget.value) {
+    cancelInstallChoice();
   } else if (uninstallTarget.value) {
     uninstallTarget.value = null;
   } else if (settingsVisible.value) {

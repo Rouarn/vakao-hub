@@ -75,8 +75,9 @@
             <p class="hud">安装位置</p>
             <div class="settings-row settings-row-start">
               <div>
-                <strong>应用安装目录</strong>
-                <span>新安装的应用会放在这里，已安装的应用不会移动</span>
+                <strong>{{ isWindows ? '便携应用目录' : '应用安装目录' }}</strong>
+                <span v-if="isWindows">没有自带安装程序的应用（单文件 exe、zip 便携包）会安装到这里</span>
+                <span v-else>新安装的应用会放在这里，已安装的应用不会移动</span>
               </div>
             </div>
             <div class="settings-path-row">
@@ -102,7 +103,10 @@
               <button class="settings-secondary" @click="$emit('reset-install-dir')">恢复默认</button>
               <button class="settings-primary" :disabled="saving" @click="$emit('save-install-dir')">保存</button>
             </div>
-            <p v-if="!installDirEditable" class="settings-note">Windows 由安装包决定位置，此项仅 macOS 生效。</p>
+            <p v-if="!installDirEditable" class="settings-note">当前平台不支持修改安装目录。</p>
+            <p v-else-if="isWindows" class="settings-note">
+              msi 和带安装向导的 exe 由它们自己的安装程序决定位置，不受此项影响；已安装的应用不会自动移动。
+            </p>
             <p v-else class="settings-note">
               可选用户主目录内或 /Applications 下的目录；桌面、文稿等受保护目录会触发系统授权。
             </p>
@@ -143,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import starUrl from '../assets/star.png';
 import type { ThemeMode } from '../composables/useTheme';
 
@@ -171,6 +176,8 @@ const props = defineProps<{
 function statusFor(field: SettingsStatus['field']): SettingsStatus | null {
   return props.settingsStatus?.field === field ? props.settingsStatus : null;
 }
+
+const isWindows = computed(() => props.platformLabel === 'Windows');
 
 const baseUrl = defineModel<string>('baseUrl', { required: true });
 const installDir = defineModel<string>('installDir', { required: true });

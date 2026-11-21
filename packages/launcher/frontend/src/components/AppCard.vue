@@ -39,6 +39,7 @@
         </div>
       </div>
       <span v-if="app.hasUpdate" class="state update">有可用更新</span>
+      <span v-else-if="app.installPending" class="state update">等待安装完成</span>
       <span v-else-if="app.running" class="state running">当前运行</span>
       <span v-else-if="app.installed" class="state installed">已安装</span>
       <span v-else class="state available">可安装</span>
@@ -61,10 +62,11 @@
     <div class="card-bottom">
       <button
         class="action"
-        :disabled="busy || updatingAll || !supportsOs || (app.running && !app.hasUpdate)"
+        :disabled="busy || updatingAll || !supportsOs || app.installPending || (app.running && !app.hasUpdate)"
         @click.stop="$emit('primary-action', app)"
       >
         <template v-if="app.hasUpdate">更新至 {{ app.latestVersion }}</template>
+        <template v-else-if="app.installPending">等待安装完成</template>
         <template v-else-if="app.running">当前运行</template>
         <template v-else-if="!app.installed">安装</template>
         <template v-else>打开</template>
@@ -75,7 +77,12 @@
     <div v-if="menuOpen" class="card-menu" @click.stop>
       <button @click="$emit('open-detail', app)">查看详情</button>
       <button v-if="app.installed && !app.running" @click="$emit('launch', app)">打开</button>
-      <button v-if="app.installed" @click="$emit('reveal', app)">在访达中显示</button>
+      <button v-if="app.installed" :disabled="!app.installPathKnown" @click="$emit('reveal', app)">
+        {{ isWindows ? '在资源管理器中显示' : '在访达中显示' }}
+      </button>
+      <button v-if="isWindows && (!app.installed || !app.installPathKnown)" @click="$emit('bind-path', app)">
+        手动指定程序位置…
+      </button>
       <button v-if="app.installed && !app.running" @click="$emit('install', app)">重新安装</button>
       <button v-if="app.homepage" @click="$emit('open-url', app.homepage)">打开主页</button>
       <button v-if="app.repoUrl" @click="$emit('open-url', app.repoUrl)">查看源码</button>
@@ -88,19 +95,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { AppView, Progress } from '../../bindings/vakaohub/launcher/internal/service';
 import { appColor } from '../lib/theme';
 import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
 
-defineProps<{
+const props = defineProps<{
   app: AppView;
   gridMode: boolean;
   busy: boolean;
   updatingAll: boolean;
   supportsOs: boolean;
   menuOpen: boolean;
+  platformLabel: string;
   progress?: Progress;
 }>();
+
+const isWindows = computed(() => props.platformLabel === 'Windows');
 
 defineEmits<{
   'open-detail': [app: AppView];
@@ -109,6 +120,7 @@ defineEmits<{
   launch: [app: AppView];
   reveal: [app: AppView];
   install: [app: AppView];
+  'bind-path': [app: AppView];
   'open-url': [url: string];
   'request-uninstall': [app: AppView];
 }>();

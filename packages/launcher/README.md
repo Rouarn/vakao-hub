@@ -60,32 +60,33 @@ bin/VaKaoHub.app
 - 断点续传：半包保存在 `~/Library/Caches/vakaohub/downloads/<artifactID>.part`，下次继续；
 - 强制更新：未更新到最新版时「打开」被禁用并提示；
 - 安装校验：SHA-256 + `codesign --verify --deep --strict`（未签名或签名损坏会被拒绝）；
-- 卸载：删除应用目录并移除已安装记录（只允许约定安装目录）；
+- 卸载：便携类删除应用容器目录；安装器类调起注册表里登记的系统卸载程序；
 - 已安装记录：`~/Library/Application Support/vakaohub/installed.json`（Windows 为 `%AppData%\vakaohub`）；
-- 设置：分发服务地址持久化到同目录 `settings.json`。
+- 设置：分发服务地址与安装目录持久化到同目录 `settings.json`。
 
 ## 平台安装策略
 
-| 平台    | 支持格式      | 安装位置                                                                                                    |
-| ------- | ------------- | ----------------------------------------------------------------------------------------------------------- |
-| macOS   | dmg、zip      | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制）                                                       |
-| Windows | zip、msi、exe | zip 解压到 `%AppData%\VaKaoHub\apps\<appKey>`；msi 静默安装；exe 命中安装器标记时调起向导，否则按便携版复制 |
-| Linux   | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications`                                                 |
+| 平台    | 支持格式      | 安装位置                                                                                                                                                     |
+| ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| macOS   | dmg、zip      | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制），可在设置中修改                                                                                        |
+| Windows | zip、msi、exe | 便携类默认 `%LOCALAPPDATA%\Programs\VaKaoHub\<appKey>`（可在设置中修改，升级留在原位置）；msi 静默安装；exe 命中安装器标记时调起向导，无法判定时由用户二选一 |
+| Linux   | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications`                                                                                                  |
 
 ### 应用包形态约定
 
 安装端在下载校验后、安装前会检查包结构（`internal/install/package.go`）；发布端 `ship.sh` 通过
 `go run ./cmd/artifact-check` 复用同一份规则，不合规的包在上传前就会被拒绝：
 
-| 平台   | 格式 | 要求                                                                                                                      |
-| ------ | ---- | ------------------------------------------------------------------------------------------------------------------------- |
-| win32  | exe  | 必须是有效的 PE（GUI/Console 均可）；含 NSIS/Inno/Wix/InstallShield/Squirrel 标记时运行安装向导，否则按单文件便携应用安装 |
-| win32  | msi  | 必须是 OLE 复合文档（微软安装包头）                                                                                       |
-| win32  | zip  | 至少一个 `.exe`；顶层有 exe 时以最大者为主程序，否则所有 exe 必须位于同一个顶层目录                                       |
-| darwin | zip  | 必须包含 `*.app/Contents/Info.plist` 与 `*.app/Contents/MacOS/` 下的可执行文件                                            |
+| 平台   | 格式 | 要求                                                                                                                                                           |
+| ------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| win32  | exe  | 必须是有效的 PE（GUI/Console 均可）；含 NSIS/Inno/Wix/InstallShield/Squirrel/7-Zip SFX 等标记或 `.ndata`/`.wixburn` 节时运行安装向导，否则按单文件便携应用安装 |
+| win32  | msi  | 必须是 OLE 复合文档（微软安装包头）                                                                                                                            |
+| win32  | zip  | 至少一个 `.exe`；顶层有 exe 时以最大者为主程序，否则所有 exe 必须位于同一个顶层目录；解压后主程序若被识别为安装器，则交给安装器运行而非复制托管                |
+| darwin | zip  | 必须包含 `*.app/Contents/Info.plist` 与 `*.app/Contents/MacOS/` 下的可执行文件                                                                                 |
 
 所有格式都禁止绝对路径与 `../` 路径穿越。便携应用推荐打成 zip；裸 exe 依赖安装器标记自动识别，
-没有标记的未知安装器会被当成便携应用复制。
+完全没有标记、文件名也不像安装程序的 exe 会在安装前让用户选择「作为便携应用安装」或「交给安装程序」，不会擅自复制。
+安装器类的应用位置以 Windows 卸载注册表为准；暂时识别不到时显示「已安装 · 位置未知」，可在详情里手动指定主程序。
 
 打新包后可先在本地校验，再走上传：
 

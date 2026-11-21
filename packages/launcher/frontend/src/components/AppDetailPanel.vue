@@ -34,15 +34,22 @@
                   >{{ selected.artifactFormat.toUpperCase() }} · {{ formatBytes(selected.artifactSize) }}</span
                 >
               </div>
+              <p v-if="selected.installPending" class="tagline">
+                安装程序已启动，正在等待系统登记；完成安装向导后刷新即可。
+              </p>
+              <p v-else-if="selected.installed" class="tagline mono location-line" :title="locationLabel">
+                位置：{{ locationLabel }}
+              </p>
             </div>
 
             <div class="detail-actions">
               <button
                 class="action"
-                :disabled="busy || !supportsOs || (selected.running && !selected.hasUpdate)"
+                :disabled="busy || !supportsOs || selected.installPending || (selected.running && !selected.hasUpdate)"
                 @click="$emit('primary-action', selected)"
               >
                 <template v-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
+                <template v-else-if="selected.installPending">等待安装完成</template>
                 <template v-else-if="selected.running">当前运行</template>
                 <template v-else-if="!selected.installed">安装</template>
                 <template v-else>打开</template>
@@ -51,7 +58,19 @@
               <div v-if="menuOpen" class="card-menu detail-menu" @click.stop>
                 <button v-if="selected.running" disabled>当前运行</button>
                 <button v-if="selected.installed && !selected.running" @click="$emit('launch', selected)">打开</button>
-                <button v-if="selected.installed" @click="$emit('reveal', selected)">在访达中显示</button>
+                <button
+                  v-if="selected.installed"
+                  :disabled="!selected.installPathKnown"
+                  @click="$emit('reveal', selected)"
+                >
+                  {{ isWindows ? '在资源管理器中显示' : '在访达中显示' }}
+                </button>
+                <button
+                  v-if="isWindows && (!selected.installed || !selected.installPathKnown)"
+                  @click="$emit('bind-path', selected)"
+                >
+                  手动指定程序位置…
+                </button>
                 <button v-if="selected.installed && !selected.running" @click="$emit('install', selected)">
                   重新安装
                 </button>
@@ -211,9 +230,17 @@ defineEmits<{
   launch: [app: AppView];
   reveal: [app: AppView];
   install: [app: AppView];
+  'bind-path': [app: AppView];
   'open-url': [url: string];
   'request-uninstall': [app: AppView];
 }>();
+
+// 安装器类的位置由它自己决定；路径未知时给出可读说明，而不是显示空串。
+const isWindows = computed(() => props.platformLabel === 'Windows');
+const locationLabel = computed(() => {
+  if (props.selected.installPathKnown) return props.selected.installPath;
+  return props.selected.installKind === 'installer' ? '由安装程序管理' : '位置未知';
+});
 
 const detailScroll = ref<HTMLElement | null>(null);
 const scrollable = ref(false);
