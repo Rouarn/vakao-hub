@@ -7,7 +7,8 @@ import (
 	"syscall"
 )
 
-func sameVolume(left, right string) (bool, error) {
+// SameVolume 判断两个路径是否位于同一文件系统；跨文件系统时 os.Rename 会返回 EXDEV。
+func SameVolume(left, right string) (bool, error) {
 	var leftStat, rightStat syscall.Stat_t
 	if err := syscall.Stat(left, &leftStat); err != nil {
 		return false, err

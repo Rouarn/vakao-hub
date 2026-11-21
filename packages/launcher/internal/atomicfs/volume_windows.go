@@ -7,7 +7,8 @@ import (
 	"strings"
 )
 
-func sameVolume(left, right string) (bool, error) {
+// SameVolume 判断两个路径是否位于同一卷；跨卷时 os.Rename 会失败。
+func SameVolume(left, right string) (bool, error) {
 	leftVolume := strings.ToLower(filepath.VolumeName(left))
 	rightVolume := strings.ToLower(filepath.VolumeName(right))
 	if leftVolume == "" || rightVolume == "" {

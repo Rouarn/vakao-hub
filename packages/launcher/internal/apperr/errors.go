@@ -82,11 +82,32 @@ func KindOf(err error) Kind {
 	case errors.Is(err, context.DeadlineExceeded):
 		return KindTimeout
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return KindTimeout
+	if kind, ok := networkKind(err); ok {
+		return kind
 	}
 	return KindInternal
+}
+
+// networkKind 只认真正来自网络栈的错误。
+// syscall.Errno 同样实现了 net.Error（Timeout/Temporary），如果直接用
+// errors.As(err, &net.Error)，文件系统错误（ENOENT、ERROR_NOT_SAME_DEVICE 等）
+// 都会被误判成网络错误。这里收敛到 *net.OpError / *net.DNSError。
+func networkKind(err error) (Kind, bool) {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if opErr.Timeout() {
+			return KindTimeout, true
+		}
+		return KindNetwork, true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		if dnsErr.IsTimeout {
+			return KindTimeout, true
+		}
+		return KindNetwork, true
+	}
+	return "", false
 }
 
 // IsRetryable 返回错误是否允许用户直接重试。
@@ -178,12 +199,8 @@ func FromContext(err error, op string) error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return New(KindTimeout, op, "", err)
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return New(KindTimeout, op, "", err)
-		}
-		return New(KindNetwork, op, "", err)
+	if kind, ok := networkKind(err); ok {
+		return New(kind, op, "", err)
 	}
 	return FromOS(err, op)
 }
@@ -219,12 +236,7 @@ func FromOS(err error, op string) error {
 	case errors.Is(err, syscall.EBUSY), isTextFileBusy(err), isSharingViolation(err):
 		return New(KindBusy, op, "", err)
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return New(KindTimeout, op, "", err)
-		}
-		return New(KindNetwork, op, "", err)
-	}
+	// 文件系统/进程错误一律留在本地分类，绝不落成网络错误；
+	// 网络错误由 FromContext 在进入这里之前识别。
 	return New(KindInternal, op, "", err)
 }

@@ -130,6 +130,50 @@ func TestFromOS(t *testing.T) {
 	}
 }
 
+// 文件系统/进程错误会实现 net.Error（syscall.Errno 带 Timeout/Temporary），
+// 必须锁住它们不会被归到网络类，否则界面会把本地磁盘问题说成“无法连接更新服务”。
+func TestLocalErrorsNeverNetwork(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"file-not-exist", &os.PathError{Op: "open", Path: "x", Err: syscall.ENOENT}},
+		{"cross-device", &os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.Errno(17)}},
+		{"invalid-argument", &os.PathError{Op: "read", Path: "x", Err: syscall.EINVAL}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if kind := KindOf(FromOS(testCase.err, "install")); kind == KindNetwork || kind == KindTimeout {
+				t.Fatalf("FromOS 把本地错误归为 %s：%v", kind, testCase.err)
+			}
+			if kind := KindOf(FromContext(testCase.err, "download")); kind == KindNetwork || kind == KindTimeout {
+				t.Fatalf("FromContext 把本地错误归为 %s：%v", kind, testCase.err)
+			}
+			if kind := KindOf(testCase.err); kind == KindNetwork || kind == KindTimeout {
+				t.Fatalf("KindOf 把本地错误归为 %s：%v", kind, testCase.err)
+			}
+		})
+	}
+}
+
+func TestNetworkErrorsStillNetwork(t *testing.T) {
+	network := FromContext(&net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}, "catalog")
+	if KindOf(network) != KindNetwork {
+		t.Fatalf("网络错误 => %s，期望 network", KindOf(network))
+	}
+
+	timeout := FromContext(&net.OpError{Op: "read", Net: "tcp", Err: timeoutError{}}, "catalog")
+	if KindOf(timeout) != KindTimeout {
+		t.Fatalf("网络超时 => %s，期望 timeout", KindOf(timeout))
+	}
+}
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
+
 func TestMarshalFallback(t *testing.T) {
 	nilPayload := decode(t, nil)
 	if nilPayload.Code != "E_INTERNAL" || nilPayload.Message == "" {

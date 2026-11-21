@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"vakaohub/launcher/internal/api"
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/atomicfs"
 	"vakaohub/launcher/internal/contract"
 )
 
@@ -177,10 +179,53 @@ func (s *InstallService) download(ctx context.Context, opID, appKey, url string,
 	if err != nil {
 		return "", err
 	}
-	if err := os.Rename(partPath, dest); err != nil {
-		return "", apperr.FromOS(err, "download")
+	if err := moveDownloaded(partPath, dest); err != nil {
+		return "", apperr.FromOS(err, "download.move")
 	}
 	return sha, nil
+}
+
+// moveDownloaded 把缓存分片移到本次安装的临时路径。
+// 缓存目录（LocalAppData）与系统临时目录可能不在同一卷——Windows 上 TEMP 常被
+// 改到 D:，此时 os.Rename 返回 ERROR_NOT_SAME_DEVICE。跨卷必须复制后再删分片，
+// 否则每次安装都会在“下载已完成”之后失败。
+func moveDownloaded(from, to string) error {
+	renameErr := os.Rename(from, to)
+	if renameErr == nil {
+		return nil
+	}
+	same, err := atomicfs.SameVolume(filepath.Dir(from), filepath.Dir(to))
+	if err != nil || same {
+		return renameErr
+	}
+	if err := copyFile(from, to); err != nil {
+		return errors.Join(renameErr, err)
+	}
+	_ = os.Remove(from)
+	return nil
+}
+
+func copyFile(from, to string) error {
+	source, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	destination, err := os.OpenFile(to, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	buffer := make([]byte, 1024*1024)
+	if _, err := io.CopyBuffer(destination, source, buffer); err != nil {
+		_ = destination.Close()
+		return err
+	}
+	if err := destination.Sync(); err != nil {
+		_ = destination.Close()
+		return err
+	}
+	return destination.Close()
 }
 
 func (s *InstallService) fileSHA256(ctx context.Context, path string) (string, error) {

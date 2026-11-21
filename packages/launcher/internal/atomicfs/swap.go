@@ -80,7 +80,7 @@ func SwapWithBackup(staged, target, backup string) (func() error, error) {
 		return nil, apperr.New(apperr.KindInternal, "atomicfs.swap", "备份路径不能与安装路径相同", nil)
 	}
 
-	same, err := sameVolume(filepath.Dir(stagedPath), filepath.Dir(targetPath))
+	same, err := SameVolume(filepath.Dir(stagedPath), filepath.Dir(targetPath))
 	if err != nil {
 		return nil, apperr.FromOS(err, "atomicfs.swap")
 	}
