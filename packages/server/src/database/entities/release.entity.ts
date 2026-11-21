@@ -1,11 +1,4 @@
-import {
-  Column,
-  Entity,
-  Index,
-  ManyToOne,
-  OneToMany,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, Index, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { bigintTransformer } from '../transformers.js';
 import type { AppEntity } from './app.entity.js';
 import type { ArtifactEntity } from './artifact.entity.js';

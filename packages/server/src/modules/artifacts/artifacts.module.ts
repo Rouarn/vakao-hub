@@ -7,9 +7,7 @@ import { ArtifactsController } from './artifacts.controller.js';
 import { ArtifactsService } from './artifacts.service.js';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([ArtifactEntity, ReleaseEntity, AppEntity]),
-  ],
+  imports: [TypeOrmModule.forFeature([ArtifactEntity, ReleaseEntity, AppEntity])],
   controllers: [ArtifactsController],
   providers: [ArtifactsService],
   exports: [ArtifactsService],

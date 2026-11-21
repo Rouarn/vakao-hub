@@ -18,12 +18,8 @@
               <button :class="{ active: themeMode === 'system' }" @click="$emit('theme-mode', 'system')">
                 跟随系统
               </button>
-              <button :class="{ active: themeMode === 'dark' }" @click="$emit('theme-mode', 'dark')">
-                深色
-              </button>
-              <button :class="{ active: themeMode === 'light' }" @click="$emit('theme-mode', 'light')">
-                浅色
-              </button>
+              <button :class="{ active: themeMode === 'dark' }" @click="$emit('theme-mode', 'dark')">深色</button>
+              <button :class="{ active: themeMode === 'light' }" @click="$emit('theme-mode', 'light')">浅色</button>
             </div>
             <p class="settings-note">跟随系统时会随 macOS 外观自动切换。</p>
           </section>
@@ -89,20 +85,14 @@
                 :disabled="!installDirEditable"
                 :placeholder="defaultInstallDir"
               />
-              <button
-                class="settings-secondary"
-                :disabled="!installDirEditable"
-                @click="$emit('select-install-dir')"
-              >
+              <button class="settings-secondary" :disabled="!installDirEditable" @click="$emit('select-install-dir')">
                 选择…
               </button>
             </div>
             <div v-if="installDirEditable" class="settings-actions">
               <button class="settings-secondary" @click="$emit('reset-install-dir')">恢复默认</button>
             </div>
-            <p v-if="!installDirEditable" class="settings-note">
-              Windows 由安装包决定位置，此项仅 macOS 生效。
-            </p>
+            <p v-if="!installDirEditable" class="settings-note">Windows 由安装包决定位置，此项仅 macOS 生效。</p>
             <p v-else class="settings-note">
               可选用户主目录内或 /Applications 下的目录；桌面、文稿等受保护目录会触发系统授权。
             </p>
@@ -115,9 +105,15 @@
               <span>软件中心启动器</span>
             </div>
             <div class="about-grid">
-              <div><span class="hud">版本</span><strong>{{ launcherVersion }}</strong></div>
-              <div><span class="hud">系统</span><strong>{{ platformLabel }} {{ hostOsVersion }}</strong></div>
-              <div><span class="hud">架构</span><strong>{{ arch }}</strong></div>
+              <div>
+                <span class="hud">版本</span><strong>{{ launcherVersion }}</strong>
+              </div>
+              <div>
+                <span class="hud">系统</span><strong>{{ platformLabel }} {{ hostOsVersion }}</strong>
+              </div>
+              <div>
+                <span class="hud">架构</span><strong>{{ arch }}</strong>
+              </div>
             </div>
             <div class="settings-links">
               <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub')">GitHub ↗</button>

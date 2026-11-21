@@ -80,9 +80,11 @@ interface WailsApp {
 }
 
 export function appApi(): WailsApp {
-  const bridge = (window as unknown as {
-    go?: { main?: { App?: WailsApp } };
-  }).go;
+  const bridge = (
+    window as unknown as {
+      go?: { main?: { App?: WailsApp } };
+    }
+  ).go;
   const api = bridge?.main?.App;
   if (!api) {
     throw new Error('Wails 运行时未就绪，请通过桌面应用启动');

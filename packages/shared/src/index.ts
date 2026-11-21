@@ -15,15 +15,7 @@ export const ARCHES = ['universal', 'arm64', 'x64'] as const;
 export type Arch = (typeof ARCHES)[number];
 
 /** 支持的产物格式 */
-export const ARTIFACT_FORMATS = [
-  'apk',
-  'dmg',
-  'msi',
-  'exe',
-  'zip',
-  'appimage',
-  'deb',
-] as const;
+export const ARTIFACT_FORMATS = ['apk', 'dmg', 'msi', 'exe', 'zip', 'appimage', 'deb'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 /** 发布渠道 */

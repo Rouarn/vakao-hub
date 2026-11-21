@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { env } from '../../config/env.js';
@@ -43,9 +38,7 @@ export class EventRetentionService implements OnModuleInit, OnModuleDestroy {
     const result = await this.events.delete({ createdAt: LessThan(cutoff) });
     const removed = result.affected ?? 0;
     if (removed > 0) {
-      this.logger.log(
-        `已清理 ${removed} 条超过 ${env.events.retentionDays} 天的客户端事件`,
-      );
+      this.logger.log(`已清理 ${removed} 条超过 ${env.events.retentionDays} 天的客户端事件`);
     }
     return removed;
   }

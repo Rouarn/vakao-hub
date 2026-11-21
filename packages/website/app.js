@@ -23,7 +23,7 @@
   function readStore(key) {
     try {
       return localStorage.getItem(key);
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -31,7 +31,7 @@
   function writeStore(key, value) {
     try {
       localStorage.setItem(key, value);
-    } catch (error) {
+    } catch {
       /* 隐私模式下忽略 */
     }
   }
@@ -86,18 +86,15 @@
   var apiLabel = document.getElementById('api-label');
 
   function esc(value) {
-    return String(value === null || value === undefined ? '' : value).replace(
-      /[&<>"']/g,
-      function (char) {
-        return {
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#39;',
-        }[char];
-      },
-    );
+    return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function (char) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char];
+    });
   }
 
   function colorFor(key) {
@@ -110,14 +107,10 @@
 
   // 与 @vakao/hub-shared 的 formatBytes 保持同一口径（website 无构建，按共享规则实现）。
   function formatBytes(bytes) {
-    if (bytes === null || bytes === undefined || !isFinite(bytes) || bytes < 0)
-      return '未知大小';
+    if (bytes === null || bytes === undefined || !isFinite(bytes) || bytes < 0) return '未知大小';
     if (!bytes) return '0 B';
     var units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var index = Math.min(
-      Math.floor(Math.log(bytes) / Math.log(1024)),
-      units.length - 1,
-    );
+    var index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
     return (bytes / Math.pow(1024, index)).toFixed(1) + ' ' + units[index];
   }
 
@@ -147,15 +140,11 @@
     try {
       var value = localStorage.getItem(DEVICE_KEY);
       if (!value) {
-        value =
-          'web-' +
-          Date.now().toString(36) +
-          '-' +
-          Math.random().toString(36).slice(2, 10);
+        value = 'web-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
         localStorage.setItem(DEVICE_KEY, value);
       }
       return value;
-    } catch (error) {
+    } catch {
       return '';
     }
   }
@@ -190,7 +179,7 @@
       }).catch(function () {
         /* 上报失败不影响下载 */
       });
-    } catch (error) {
+    } catch {
       /* 上报失败不影响下载 */
     }
   }
@@ -238,13 +227,7 @@
       return '<img src="' + esc(app.iconUrl) + '" alt="" loading="lazy" />';
     }
     var initial = (app.name || '?').trim().charAt(0).toUpperCase();
-    return (
-      '<span class="ico" style="background:' +
-      esc(colorFor(app.appKey)) +
-      '">' +
-      esc(initial) +
-      '</span>'
-    );
+    return '<span class="ico" style="background:' + esc(colorFor(app.appKey)) + '">' + esc(initial) + '</span>';
   }
 
   function renderTabs() {
@@ -288,9 +271,7 @@
     var platform = state.platform;
     var arts = app.artifacts[platform] || [];
     if (!arts.length) {
-      return (
-        '<span class="dl" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>'
-      );
+      return '<span class="dl" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>';
     }
     var prefix = state.filter === 'all' ? LABELS[platform] + ' ' : '';
     return arts
@@ -344,9 +325,7 @@
         if (version) meta += ' · v' + esc(version);
         if (app.homepage) {
           meta +=
-            ' · <a class="home" href="' +
-            esc(app.homepage) +
-            '" target="_blank" rel="noreferrer">主页<i>↗</i></a>';
+            ' · <a class="home" href="' + esc(app.homepage) + '" target="_blank" rel="noreferrer">主页<i>↗</i></a>';
         }
         return (
           '<div class="item">' +
@@ -395,14 +374,11 @@
     var arts = launcher.artifacts[platform] || [];
     var artifact = arts[0];
     var release = launcher.releases[platform];
-    var desktopRelease =
-      launcher.releases.darwin || launcher.releases.win32 || null;
+    var desktopRelease = launcher.releases.darwin || launcher.releases.win32 || null;
 
     if (artifact && release) {
-      kicker.textContent =
-        osText(platform, artifact.minOs) + ' · v' + release.versionName;
-      specOs.textContent =
-        archLabel(platform, artifact.arch) + ' · ' + artifact.format.toUpperCase();
+      kicker.textContent = osText(platform, artifact.minOs) + ' · v' + release.versionName;
+      specOs.textContent = archLabel(platform, artifact.arch) + ' · ' + artifact.format.toUpperCase();
       heroCta.innerHTML =
         '<a class="btn btn-gold" href="' +
         esc(artifact.downloadUrl) +
@@ -430,10 +406,8 @@
     var desktopVersion = desktopRelease ? ' · v' + desktopRelease.versionName : '';
     kicker.textContent = 'macOS / Windows' + desktopVersion;
     specOs.textContent = '仅桌面端 · 无 ' + LABELS[platform] + ' 包';
-    heroCta.innerHTML =
-      '<span class="btn" aria-disabled="true">启动器暂无 ' + esc(LABELS[platform]) + ' 版</span>';
-    navCta.innerHTML =
-      '<span class="mini" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>';
+    heroCta.innerHTML = '<span class="btn" aria-disabled="true">启动器暂无 ' + esc(LABELS[platform]) + ' 版</span>';
+    navCta.innerHTML = '<span class="mini" aria-disabled="true">暂无 ' + esc(LABELS[platform]) + ' 版</span>';
   }
 
   function render() {
@@ -457,11 +431,7 @@
   var lastError = '';
 
   function fetchPlatform(platform) {
-    var url =
-      apiBase +
-      '/catalog?platform=' +
-      encodeURIComponent(platform) +
-      '&arch=universal';
+    var url = apiBase + '/catalog?platform=' + encodeURIComponent(platform) + '&arch=universal';
     return fetch(url)
       .then(function (response) {
         return response.json().then(function (body) {

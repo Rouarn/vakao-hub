@@ -181,7 +181,10 @@ input {
   background: transparent;
   color: var(--ink-2);
   cursor: pointer;
-  transition: border-color 0.16s, color 0.16s, background 0.22s;
+  transition:
+    border-color 0.16s,
+    color 0.16s,
+    background 0.22s;
 }
 
 .theme-btn:hover {
@@ -286,7 +289,10 @@ h1 {
   font-size: 13.5px;
   font-weight: 600;
   text-decoration: none;
-  transition: background 0.16s, border-color 0.16s, color 0.16s;
+  transition:
+    background 0.16s,
+    border-color 0.16s,
+    color 0.16s;
 }
 
 .btn .m {
@@ -356,7 +362,9 @@ h1 {
   height: auto;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 12px;
-  box-shadow: 0 46px 80px -42px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 46px 80px -42px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 /* ---------- 启动器说明 ---------- */
@@ -603,7 +611,9 @@ h1 {
   color: var(--ink-2);
   text-decoration: none;
   white-space: nowrap;
-  transition: border-color 0.16s, color 0.16s;
+  transition:
+    border-color 0.16s,
+    color 0.16s;
 }
 
 .item a.dl:hover {
@@ -832,7 +842,9 @@ h1 {
 }
 
 [data-theme='light'] body {
-  transition: background-color 0.22s ease, color 0.22s ease;
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease;
 }
 
 [data-theme='light'] ::selection {
@@ -881,7 +893,9 @@ h1 {
 
 [data-theme='light'] .shot img {
   border-color: rgba(26, 23, 20, 0.16);
-  box-shadow: 0 46px 80px -46px rgba(56, 44, 20, 0.32), 0 0 0 1px rgba(26, 23, 20, 0.04);
+  box-shadow:
+    0 46px 80px -46px rgba(56, 44, 20, 0.32),
+    0 0 0 1px rgba(26, 23, 20, 0.04);
 }
 
 [data-theme='light'] .launch-shot {

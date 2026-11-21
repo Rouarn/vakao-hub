@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+**/dist
+packages/launcher/build
+packages/launcher/frontend/wailsjs
+packages/launcher/frontend/bindings
+packages/server/storage
+pnpm-lock.yaml
+**/*.d.ts

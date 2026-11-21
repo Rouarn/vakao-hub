@@ -8,21 +8,10 @@
       <n-button size="small" :loading="loading" @click="load">刷新</n-button>
     </div>
 
-    <n-data-table
-      :columns="columns"
-      :data="logs"
-      :loading="loading"
-      :bordered="false"
-      size="small"
-    />
+    <n-data-table :columns="columns" :data="logs" :loading="loading" :bordered="false" size="small" />
 
     <div class="pager">
-      <n-pagination
-        v-model:page="page"
-        :page-size="pageSize"
-        :item-count="total"
-        @update:page="load"
-      />
+      <n-pagination v-model:page="page" :page-size="pageSize" :item-count="total" @update:page="load" />
     </div>
   </div>
 </template>
@@ -56,11 +45,7 @@ const columns: DataTableColumns<AuditLog> = [
     key: 'method',
     width: 90,
     render: (row) =>
-      h(
-        NTag,
-        { size: 'small', type: row.method === 'DELETE' ? 'error' : 'warning' },
-        { default: () => row.method },
-      ),
+      h(NTag, { size: 'small', type: row.method === 'DELETE' ? 'error' : 'warning' }, { default: () => row.method }),
   },
   { title: '路径', key: 'path', ellipsis: { tooltip: true } },
   {

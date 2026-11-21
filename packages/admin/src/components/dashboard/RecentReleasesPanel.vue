@@ -26,12 +26,22 @@ defineProps<{
 const columns: DataTableColumns<Stats['latestReleases'][number]> = [
   { title: '应用', key: 'appName', width: 160 },
   { title: '版本', key: 'versionName', width: 110, render: (row) => h('span', { class: 'mono' }, row.versionName) },
-  { title: '构建号', key: 'versionCode', width: 100, render: (row) => h('span', { class: 'mono muted' }, String(row.versionCode)) },
+  {
+    title: '构建号',
+    key: 'versionCode',
+    width: 100,
+    render: (row) => h('span', { class: 'mono muted' }, String(row.versionCode)),
+  },
   {
     title: '状态',
     key: 'status',
     width: 90,
-    render: (row) => h(NTag, { size: 'small', bordered: false, type: STATUS_TAG_TYPE[row.status] ?? 'default' }, { default: () => STATUS_LABEL[row.status] ?? String(row.status) }),
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: STATUS_TAG_TYPE[row.status] ?? 'default' },
+        { default: () => STATUS_LABEL[row.status] ?? String(row.status) },
+      ),
   },
   { title: '创建时间', key: 'createdAt', render: (row) => formatDateTime(row.createdAt) },
 ];

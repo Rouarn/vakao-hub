@@ -1,11 +1,7 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { env } from '../config/env.js';
-import {
-  CONNECTION_LIMITS,
-  connectionOptions,
-  MIGRATIONS,
-} from './connection.js';
+import { CONNECTION_LIMITS, connectionOptions, MIGRATIONS } from './connection.js';
 import { ENTITIES } from './entities/index.js';
 
 /**

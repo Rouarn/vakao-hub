@@ -30,12 +30,18 @@
               <div class="detail-sub">
                 <span>版本 {{ selected.installedVersion || selected.latestVersion }}</span>
                 <span>{{ formatDate(selected.latestPublishedAt) }}</span>
-                <span class="mono">{{ selected.artifactFormat.toUpperCase() }} · {{ formatBytes(selected.artifactSize) }}</span>
+                <span class="mono"
+                  >{{ selected.artifactFormat.toUpperCase() }} · {{ formatBytes(selected.artifactSize) }}</span
+                >
               </div>
             </div>
 
             <div class="detail-actions">
-              <button class="action" :disabled="busy || !supportsOs || (selected.running && (!isSelf(selected) || !selected.hasUpdate))" @click="$emit('primary-action', selected)">
+              <button
+                class="action"
+                :disabled="busy || !supportsOs || (selected.running && (!isSelf(selected) || !selected.hasUpdate))"
+                @click="$emit('primary-action', selected)"
+              >
                 <template v-if="selected.hasUpdate">更新至 {{ selected.latestVersion }}</template>
                 <template v-else-if="selected.running">当前运行</template>
                 <template v-else-if="!selected.installed">安装</template>
@@ -46,7 +52,9 @@
                 <button v-if="selected.running" disabled>当前运行</button>
                 <button v-if="selected.installed && !selected.running" @click="$emit('launch', selected)">打开</button>
                 <button v-if="selected.installed" @click="$emit('reveal', selected)">在访达中显示</button>
-                <button v-if="selected.installed && !selected.running" @click="$emit('install', selected)">重新安装</button>
+                <button v-if="selected.installed && !selected.running" @click="$emit('install', selected)">
+                  重新安装
+                </button>
                 <button @click="scrollToChangelog">更新说明</button>
                 <button v-if="selected.homepage" @click="$emit('open-url', selected.homepage)">打开主页</button>
                 <button v-if="selected.repoUrl" @click="$emit('open-url', selected.repoUrl)">查看源码</button>
@@ -63,10 +71,21 @@
           </div>
 
           <div class="detail-links">
-            <a v-if="selected.homepage" :href="selected.homepage" @click.prevent="$emit('open-url', selected.homepage)">网站 ↗</a>
-            <a v-if="selected.repoUrl" :href="selected.repoUrl" @click.prevent="$emit('open-url', selected.repoUrl)">GITHUB ↗</a>
-            <a v-if="selected.docsUrl" :href="selected.docsUrl" @click.prevent="$emit('open-url', selected.docsUrl)">帮助文档 ↗</a>
-            <a v-if="selected.releaseUrl || selected.repoUrl" :href="releaseUrl(selected)" @click.prevent="$emit('open-url', releaseUrl(selected))">版本发布 ↗</a>
+            <a v-if="selected.homepage" :href="selected.homepage" @click.prevent="$emit('open-url', selected.homepage)"
+              >网站 ↗</a
+            >
+            <a v-if="selected.repoUrl" :href="selected.repoUrl" @click.prevent="$emit('open-url', selected.repoUrl)"
+              >GITHUB ↗</a
+            >
+            <a v-if="selected.docsUrl" :href="selected.docsUrl" @click.prevent="$emit('open-url', selected.docsUrl)"
+              >帮助文档 ↗</a
+            >
+            <a
+              v-if="selected.releaseUrl || selected.repoUrl"
+              :href="releaseUrl(selected)"
+              @click.prevent="$emit('open-url', releaseUrl(selected))"
+              >版本发布 ↗</a
+            >
             <span v-if="selected.running" class="link-state">当前运行中</span>
             <span v-if="selected.duplicates?.length" class="link-state warn">检测到多份安装</span>
           </div>
@@ -124,9 +143,15 @@
           </div>
 
           <div class="release-info">
-            <div><span class="hud">版本</span><strong>{{ selected.latestVersion }}</strong></div>
-            <div><span class="hud">发布日期</span><strong>{{ formatDate(selected.latestPublishedAt) }}</strong></div>
-            <div><span class="hud">大小</span><strong>{{ formatBytes(selected.artifactSize) }}</strong></div>
+            <div>
+              <span class="hud">版本</span><strong>{{ selected.latestVersion }}</strong>
+            </div>
+            <div>
+              <span class="hud">发布日期</span><strong>{{ formatDate(selected.latestPublishedAt) }}</strong>
+            </div>
+            <div>
+              <span class="hud">大小</span><strong>{{ formatBytes(selected.artifactSize) }}</strong>
+            </div>
             <div>
               <span class="hud">平台</span>
               <strong>
@@ -139,9 +164,7 @@
           <div class="changelog">
             <p class="hud">02 / 更新日志</p>
             <ul>
-              <li v-for="item in visibleChanges" :key="item">
-                <span class="bullet"></span>{{ item }}
-              </li>
+              <li v-for="item in visibleChanges" :key="item"><span class="bullet"></span>{{ item }}</li>
             </ul>
             <button v-if="remainingChanges > 0" class="more-changes" @click="showAllChanges = !showAllChanges">
               {{ showAllChanges ? '收起' : `显示另外 ${remainingChanges} 项` }}
@@ -231,9 +254,7 @@ function updateScrollbar(): void {
   const thumbHeight = Math.max(28, Math.round((trackHeight * trackHeight) / element.scrollHeight));
   scrollThumbHeight.value = Math.min(trackHeight, thumbHeight);
   const maxTop = trackHeight - scrollThumbHeight.value;
-  scrollThumbTop.value = maxScroll > 0
-    ? Math.round((element.scrollTop / maxScroll) * maxTop)
-    : 0;
+  scrollThumbTop.value = maxScroll > 0 ? Math.round((element.scrollTop / maxScroll) * maxTop) : 0;
 }
 
 function resetDetailScroll(): void {

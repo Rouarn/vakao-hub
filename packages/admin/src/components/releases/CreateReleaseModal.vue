@@ -29,7 +29,12 @@
       </div>
 
       <n-form-item label="更新说明">
-        <n-input v-model:value="form.updateLog" type="textarea" placeholder="这一版改了什么" :autosize="{ minRows: 3, maxRows: 6 }" />
+        <n-input
+          v-model:value="form.updateLog"
+          type="textarea"
+          placeholder="这一版改了什么"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
       </n-form-item>
     </n-form>
     <template #footer>
@@ -139,6 +144,8 @@ async function save(): Promise<void> {
 }
 
 @media (max-width: 640px) {
-  .create-grid { grid-template-columns: 1fr; }
+  .create-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -79,13 +79,13 @@ pnpm dev:admin
 
 ## 数据模型
 
-| 表 | 说明 |
-| --- | --- |
-| `hub_apps` | 应用（appKey、名称、图标、仓库、主页） |
-| `hub_releases` | 版本（versionName/versionCode、渠道、状态、灰度、强更、最低版本） |
-| `hub_artifacts` | 产物（platform/arch/format、文件名、大小、SHA-256、下载量） |
-| `hub_events` | 客户端事件（check/download/install/launch 等） |
-| `hub_admin_users` | 管理端账号 |
+| 表                | 说明                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| `hub_apps`        | 应用（appKey、名称、图标、仓库、主页）                            |
+| `hub_releases`    | 版本（versionName/versionCode、渠道、状态、灰度、强更、最低版本） |
+| `hub_artifacts`   | 产物（platform/arch/format、文件名、大小、SHA-256、下载量）       |
+| `hub_events`      | 客户端事件（check/download/install/launch 等）                    |
+| `hub_admin_users` | 管理端账号                                                        |
 
 同一版本可以挂多份产物：Android 的 APK、macOS 的 DMG、Windows 的 MSI/EXE/ZIP；平台与架构通过 `platform / arch / format` 区分。
 

@@ -27,11 +27,20 @@ function parseArgs(argv) {
   const out = { _: [], artifacts: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (!a.startsWith('--')) { out._.push(a); continue; }
+    if (!a.startsWith('--')) {
+      out._.push(a);
+      continue;
+    }
     const key = a.slice(2);
     const next = argv[i + 1];
-    if (key === 'no-publish') { out.publish = 'none'; continue; }
-    if (next === undefined || next.startsWith('--')) { out[key] = true; continue; }
+    if (key === 'no-publish') {
+      out.publish = 'none';
+      continue;
+    }
+    if (next === undefined || next.startsWith('--')) {
+      out[key] = true;
+      continue;
+    }
     if (key === 'file') {
       out.artifacts.push({ file: next });
       i += 1;
@@ -77,7 +86,11 @@ async function api(method, path, body, tok) {
     body: body === null ? undefined : JSON.stringify(body ?? {}),
   });
   const text = await res.text();
-  try { return JSON.parse(text); } catch { return { success: false, message: text.slice(0, 200) }; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { success: false, message: text.slice(0, 200) };
+  }
 }
 
 async function upload(tok, releaseId, a) {
@@ -95,7 +108,12 @@ async function upload(tok, releaseId, a) {
     body: form,
   });
   const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch { json = { success: false, message: text.slice(0, 200) }; }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { success: false, message: text.slice(0, 200) };
+  }
   return { ...json, _sha256: createHash('sha256').update(buf).digest('hex'), _size: buf.length };
 }
 
@@ -122,13 +140,18 @@ async function main() {
     if (release) {
       console.log(`复用已有版本 ${args.version} (id=${release.id})`);
     } else {
-      const res = await api('POST', '/admin/releases', {
-        appId: app.id,
-        versionName: args.version,
-        versionCode: code,
-        channel: args.channel ?? 'stable',
-        updateLog: args.notes ?? '',
-      }, tok);
+      const res = await api(
+        'POST',
+        '/admin/releases',
+        {
+          appId: app.id,
+          versionName: args.version,
+          versionCode: code,
+          channel: args.channel ?? 'stable',
+          updateLog: args.notes ?? '',
+        },
+        tok,
+      );
       if (!res.success) throw new Error('建版本失败：' + JSON.stringify(res).slice(0, 300));
       release = res.data;
       console.log(`新建版本 ${args.version} (id=${release.id}, code=${code})`);
@@ -151,13 +174,16 @@ async function main() {
       }
       const up = await upload(tok, release.id, a);
       if (!up.success) throw new Error(`上传失败 ${basename(a.file)}: ${up.message ?? ''}`);
-      console.log(`  上传 ${basename(a.file)} → ${a.platform}/${a.arch}/${a.format} ` +
-        `(${(up._size / 1024 / 1024).toFixed(1)} MB, sha256 ${up._sha256.slice(0, 12)}…)`);
+      console.log(
+        `  上传 ${basename(a.file)} → ${a.platform}/${a.arch}/${a.format} ` +
+          `(${(up._size / 1024 / 1024).toFixed(1)} MB, sha256 ${up._sha256.slice(0, 12)}…)`,
+      );
     }
 
     const mode = args.publish ?? 'full';
     if (mode !== 'none') {
-      const body = mode === 'gray' ? { mode: 'gray', grayPercent: Number(args['gray-percent'] ?? 10) } : { mode: 'full' };
+      const body =
+        mode === 'gray' ? { mode: 'gray', grayPercent: Number(args['gray-percent'] ?? 10) } : { mode: 'full' };
       const res = await api('POST', `/admin/releases/${release.id}/publish`, body, tok);
       console.log('发布:', res.success ? `ok (${mode})` : JSON.stringify(res).slice(0, 200));
     } else {
@@ -166,7 +192,12 @@ async function main() {
     return;
   }
 
-  console.log('用法: node tools/hub-cli.mjs apps | release --app <key> --version <v> --file <path> --platform <p> --arch <a> --format <f> [--publish full|gray|none]');
+  console.log(
+    '用法: node tools/hub-cli.mjs apps | release --app <key> --version <v> --file <path> --platform <p> --arch <a> --format <f> [--publish full|gray|none]',
+  );
 }
 
-main().catch((e) => { console.error('✗', e.message); process.exit(1); });
+main().catch((e) => {
+  console.error('✗', e.message);
+  process.exit(1);
+});

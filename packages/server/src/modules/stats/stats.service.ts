@@ -24,13 +24,12 @@ export class StatsService {
   ) {}
 
   async overview() {
-    const [appCount, releaseCount, artifactCount, eventCount] =
-      await Promise.all([
-        this.apps.count(),
-        this.releases.count(),
-        this.artifacts.count(),
-        this.events.count(),
-      ]);
+    const [appCount, releaseCount, artifactCount, eventCount] = await Promise.all([
+      this.apps.count(),
+      this.releases.count(),
+      this.artifacts.count(),
+      this.events.count(),
+    ]);
 
     const totals = await this.artifacts
       .createQueryBuilder('a')
@@ -80,10 +79,7 @@ export class StatsService {
   }
 
   /** 最近 30 天事件漏斗（检查 → 下载 → 安装） */
-  async listAuditLogs(query: {
-    page?: number;
-    pageSize?: number;
-  }): Promise<Paginated<AuditLogEntity>> {
+  async listAuditLogs(query: { page?: number; pageSize?: number }): Promise<Paginated<AuditLogEntity>> {
     const page = query.page ?? 1;
     const size = query.pageSize ?? 20;
     const [records, total] = await this.auditLogs.findAndCount({
@@ -106,17 +102,12 @@ export class StatsService {
     const query = this.events
       .createQueryBuilder('e')
       .select('e.type', 'type')
-      .addSelect(
-        "COUNT(DISTINCT COALESCE(NULLIF(e.deviceId, ''), CONCAT('event:', CAST(e.id AS CHAR))))",
-        'count',
-      )
+      .addSelect("COUNT(DISTINCT COALESCE(NULLIF(e.deviceId, ''), CONCAT('event:', CAST(e.id AS CHAR))))", 'count')
       .where('e.createdAt >= :since', { since });
 
     if (appId) query.andWhere('e.appId = :appId', { appId });
 
-    const rows = await query
-      .groupBy('e.type')
-      .getRawMany<{ type: string; count: string | number }>();
+    const rows = await query.groupBy('e.type').getRawMany<{ type: string; count: string | number }>();
 
     const counts: Record<string, number> = {};
     for (const row of rows) {

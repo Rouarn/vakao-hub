@@ -9,14 +9,7 @@ import { UpdatesService } from './updates.service.js';
 import { EventRetentionService } from './event-retention.service.js';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      AppEntity,
-      ReleaseEntity,
-      ArtifactEntity,
-      ClientEventEntity,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([AppEntity, ReleaseEntity, ArtifactEntity, ClientEventEntity])],
   controllers: [UpdatesController],
   providers: [UpdatesService, EventRetentionService],
 })

@@ -6,19 +6,13 @@ export class AppMeta1720000005000 implements MigrationInterface {
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasColumn('hub_apps', 'tagline'))) {
-      await queryRunner.query(
-        'ALTER TABLE `hub_apps` ADD COLUMN `tagline` varchar(160) NULL',
-      );
+      await queryRunner.query('ALTER TABLE `hub_apps` ADD COLUMN `tagline` varchar(160) NULL');
     }
     if (!(await queryRunner.hasColumn('hub_apps', 'features'))) {
-      await queryRunner.query(
-        'ALTER TABLE `hub_apps` ADD COLUMN `features` json NULL',
-      );
+      await queryRunner.query('ALTER TABLE `hub_apps` ADD COLUMN `features` json NULL');
     }
     if (!(await queryRunner.hasColumn('hub_apps', 'screenshots'))) {
-      await queryRunner.query(
-        'ALTER TABLE `hub_apps` ADD COLUMN `screenshots` json NULL',
-      );
+      await queryRunner.query('ALTER TABLE `hub_apps` ADD COLUMN `screenshots` json NULL');
     }
   }
 

@@ -6,9 +6,7 @@ export class AppThemeColor1720000004000 implements MigrationInterface {
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasColumn('hub_apps', 'themeColor')) return;
-    await queryRunner.query(
-      'ALTER TABLE `hub_apps` ADD COLUMN `themeColor` varchar(7) NULL',
-    );
+    await queryRunner.query('ALTER TABLE `hub_apps` ADD COLUMN `themeColor` varchar(7) NULL');
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

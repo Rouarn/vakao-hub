@@ -1,8 +1,6 @@
 <template>
   <n-modal :show="show" preset="card" title="发布版本" style="width: 480px" @update:show="$emit('update:show', $event)">
-    <p v-if="target" class="muted">
-      {{ target.versionName }}（versionCode {{ target.versionCode }}）
-    </p>
+    <p v-if="target" class="muted">{{ target.versionName }}（versionCode {{ target.versionCode }}）</p>
     <n-radio-group v-model:value="form.mode">
       <n-space vertical>
         <n-radio value="full">全量发布</n-radio>

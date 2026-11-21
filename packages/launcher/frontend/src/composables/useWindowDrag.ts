@@ -13,8 +13,7 @@ type WailsRuntime = {
   WindowSetPosition?: (x: number, y: number) => void;
 };
 
-const NO_DRAG_SELECTOR =
-  'button, a, input, select, textarea, label, [contenteditable="true"], [data-no-drag]';
+const NO_DRAG_SELECTOR = 'button, a, input, select, textarea, label, [contenteditable="true"], [data-no-drag]';
 
 export function useWindowDrag() {
   let dragging = false;

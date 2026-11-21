@@ -1,22 +1,14 @@
 import { open, stat } from 'node:fs/promises';
 
 /** 各格式的文件头/文件尾魔数校验，防止改扩展名上传任意文件 */
-export function matchesMagic(
-  format: string,
-  head: Buffer,
-  tail: Buffer,
-): boolean {
+export function matchesMagic(format: string, head: Buffer, tail: Buffer): boolean {
   const startsWith = (signature: number[]): boolean =>
-    head.length >= signature.length &&
-    signature.every((byte, index) => head[index] === byte);
+    head.length >= signature.length && signature.every((byte, index) => head[index] === byte);
 
   switch (format) {
     case 'apk':
     case 'zip':
-      return (
-        startsWith([0x50, 0x4b, 0x03, 0x04]) ||
-        startsWith([0x50, 0x4b, 0x05, 0x06])
-      );
+      return startsWith([0x50, 0x4b, 0x03, 0x04]) || startsWith([0x50, 0x4b, 0x05, 0x06]);
     case 'msi':
       return startsWith([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
     case 'exe':
@@ -34,10 +26,7 @@ export function matchesMagic(
 }
 
 /** 读取文件首尾并校验魔数 */
-export async function validateArtifactFile(
-  filePath: string,
-  format: string,
-): Promise<boolean> {
+export async function validateArtifactFile(filePath: string, format: string): Promise<boolean> {
   const info = await stat(filePath);
   const handle = await open(filePath, 'r');
   try {

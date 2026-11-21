@@ -26,34 +26,16 @@
       </div>
     </div>
 
-    <n-data-table
-      :columns="columns"
-      :data="events"
-      :loading="loading"
-      :bordered="false"
-      size="small"
-    />
+    <n-data-table :columns="columns" :data="events" :loading="loading" :bordered="false" size="small" />
 
     <div class="pager">
-      <n-pagination
-        v-model:page="page"
-        :page-size="pageSize"
-        :item-count="total"
-        @update:page="load"
-      />
+      <n-pagination v-model:page="page" :page-size="pageSize" :item-count="total" @update:page="load" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {
-  NButton,
-  NDataTable,
-  NPagination,
-  NSelect,
-  NTag,
-  useMessage,
-} from 'naive-ui';
+import { NButton, NDataTable, NPagination, NSelect, NTag, useMessage } from 'naive-ui';
 import type { DataTableColumns, SelectOption } from 'naive-ui';
 import { computed, h, onMounted, ref } from 'vue';
 import { api } from '@/api';
@@ -116,8 +98,7 @@ const columns: DataTableColumns<EventRow> = [
     title: '事件',
     key: 'type',
     width: 160,
-    render: (row) =>
-      h(NTag, { size: 'small', type: 'info' }, { default: () => row.type }),
+    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.type }),
   },
   { title: '平台', key: 'platform', width: 90 },
   { title: '架构', key: 'arch', width: 90 },

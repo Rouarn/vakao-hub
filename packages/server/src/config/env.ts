@@ -32,8 +32,7 @@ function toList(value: string | undefined): string[] {
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 const isProduction = nodeEnv === 'production';
 
-const jwtSecret =
-  process.env.JWT_SECRET ?? (isProduction ? '' : 'vakao-hub-dev-secret-change-me');
+const jwtSecret = process.env.JWT_SECRET ?? (isProduction ? '' : 'vakao-hub-dev-secret-change-me');
 
 if (!jwtSecret) {
   throw new Error('JWT_SECRET 必须配置');
@@ -53,12 +52,7 @@ export const env = {
   publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? '').replace(/\/+$/, ''),
   corsOrigins: corsOrigins.length
     ? corsOrigins
-    : [
-        'http://localhost:5180',
-        'http://127.0.0.1:5180',
-        'http://localhost:5200',
-        'http://127.0.0.1:5200',
-      ],
+    : ['http://localhost:5180', 'http://127.0.0.1:5180', 'http://localhost:5200', 'http://127.0.0.1:5200'],
 
   jwt: {
     secret: jwtSecret,

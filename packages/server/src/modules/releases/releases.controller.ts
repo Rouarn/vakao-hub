@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateReleaseDto } from './dto/create-release.dto.js';
 import { ForceReleaseDto } from './dto/list-releases-query.dto.js';
@@ -43,28 +33,19 @@ export class ReleasesController {
 
   @Patch(':id')
   @ApiOperation({ summary: '编辑草稿/已下架版本' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateReleaseDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReleaseDto) {
     return this.releasesService.update(id, dto);
   }
 
   @Post(':id/publish')
   @ApiOperation({ summary: '发布（全量/灰度）' })
-  publish(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: PublishReleaseDto,
-  ) {
+  publish(@Param('id', ParseIntPipe) id: number, @Body() dto: PublishReleaseDto) {
     return this.releasesService.publish(id, dto);
   }
 
   @Post('rollback/:appId')
   @ApiOperation({ summary: '回滚到上一个全量版本' })
-  rollback(
-    @Param('appId', ParseIntPipe) appId: number,
-    @Body() dto: RollbackDto,
-  ) {
+  rollback(@Param('appId', ParseIntPipe) appId: number, @Body() dto: RollbackDto) {
     return this.releasesService.rollbackApp(appId, dto.channel ?? 'stable');
   }
 
@@ -76,10 +57,7 @@ export class ReleasesController {
 
   @Post(':id/force')
   @ApiOperation({ summary: '切换强更开关' })
-  force(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ForceReleaseDto,
-  ) {
+  force(@Param('id', ParseIntPipe) id: number, @Body() dto: ForceReleaseDto) {
     return this.releasesService.setForce(id, dto.enabled);
   }
 

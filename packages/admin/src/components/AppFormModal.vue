@@ -13,32 +13,37 @@
           <h4>基础信息</h4>
           <div class="grid">
             <n-form-item label="appKey">
-              <n-input v-model:value="form.appKey" :disabled="Boolean(editing)" placeholder="wiredeck" />
+              <n-input v-model:value="appForm.appKey" :disabled="Boolean(editing)" placeholder="wiredeck" />
             </n-form-item>
             <n-form-item label="名称">
-              <n-input v-model:value="form.name" placeholder="WireDeck" />
+              <n-input v-model:value="appForm.name" placeholder="WireDeck" />
             </n-form-item>
             <n-form-item label="分类">
-              <n-input v-model:value="form.category" placeholder="desktop / mobile / tool" />
+              <n-input v-model:value="appForm.category" placeholder="desktop / mobile / tool" />
             </n-form-item>
             <n-form-item label="主题色">
               <div class="theme-row">
                 <n-color-picker
-                  :value="form.themeColor"
+                  :value="appForm.themeColor"
                   :show-alpha="false"
                   :modes="['hex']"
                   :swatches="themeSwatches"
                   style="flex: 1; min-width: 0"
                   @update:value="onThemeColorChange"
                 />
-                <n-button size="tiny" :type="themeAuto ? 'primary' : 'default'" :disabled="themeAuto" @click="useAutoTheme">
+                <n-button
+                  size="tiny"
+                  :type="themeAuto ? 'primary' : 'default'"
+                  :disabled="themeAuto"
+                  @click="useAutoTheme"
+                >
                   {{ themeAuto ? '自动' : '手动' }}
                 </n-button>
               </div>
             </n-form-item>
             <n-form-item label="描述" class="span-2">
               <n-input
-                v-model:value="form.description"
+                v-model:value="appForm.description"
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 3 }"
                 placeholder="一句话说明这个软件是什么"
@@ -51,16 +56,16 @@
           <h4>外链</h4>
           <div class="grid">
             <n-form-item label="仓库">
-              <n-input v-model:value="form.repoUrl" placeholder="https://github.com/..." />
+              <n-input v-model:value="appForm.repoUrl" placeholder="https://github.com/..." />
             </n-form-item>
             <n-form-item label="主页">
-              <n-input v-model:value="form.homepage" placeholder="https://..." />
+              <n-input v-model:value="appForm.homepage" placeholder="https://..." />
             </n-form-item>
             <n-form-item label="帮助文档">
-              <n-input v-model:value="form.docsUrl" placeholder="https://.../docs" />
+              <n-input v-model:value="appForm.docsUrl" placeholder="https://.../docs" />
             </n-form-item>
             <n-form-item label="版本发布">
-              <n-input v-model:value="form.releaseUrl" placeholder="https://.../releases" />
+              <n-input v-model:value="appForm.releaseUrl" placeholder="https://.../releases" />
             </n-form-item>
           </div>
         </section>
@@ -68,25 +73,25 @@
         <section class="group">
           <h4>详情展示</h4>
           <n-form-item label="图标">
-            <MediaUploader v-model="form.iconUrl" scope="icon" :app-key="form.appKey" />
+            <MediaUploader v-model="appForm.iconUrl" scope="icon" :app-key="appForm.appKey" />
           </n-form-item>
           <n-form-item label="一句话定位">
-            <n-input v-model:value="form.tagline" :maxlength="160" placeholder="显示在详情页顶部，留空则用描述" />
+            <n-input v-model:value="appForm.tagline" :maxlength="160" placeholder="显示在详情页顶部，留空则用描述" />
           </n-form-item>
           <n-form-item label="功能点">
             <div class="feature-list">
-              <div v-for="(item, index) in form.features" :key="index" class="feature-item">
+              <div v-for="(item, index) in appForm.features" :key="index" class="feature-item">
                 <n-input v-model:value="item.title" size="small" placeholder="标题" style="width: 130px; flex: none" />
                 <n-input v-model:value="item.description" size="small" placeholder="描述" />
                 <n-button size="tiny" quaternary @click="removeFeature(index)">✕</n-button>
               </div>
-              <n-button size="small" dashed :disabled="form.features.length >= 8" @click="addFeature">
-                + 添加功能点（{{ form.features.length }}/8）
+              <n-button size="small" dashed :disabled="appForm.features.length >= 8" @click="addFeature">
+                + 添加功能点（{{ appForm.features.length }}/8）
               </n-button>
             </div>
           </n-form-item>
           <n-form-item label="详情截图">
-            <MediaUploader v-model="form.screenshots" scope="screens" :app-key="form.appKey" multiple />
+            <MediaUploader v-model="appForm.screenshots" scope="screens" :app-key="appForm.appKey" multiple />
           </n-form-item>
         </section>
       </div>
@@ -102,16 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  NButton,
-  NColorPicker,
-  NDrawer,
-  NDrawerContent,
-  NFormItem,
-  NInput,
-  useMessage,
-} from 'naive-ui';
-import { nextTick, reactive, ref, watch } from 'vue';
+import { NButton, NColorPicker, NDrawer, NDrawerContent, NFormItem, NInput, useMessage } from 'naive-ui';
+import { nextTick, ref, watch } from 'vue';
 import { api } from '@/api';
 import type { AppRow } from '@/api/types';
 import MediaUploader from './MediaUploader.vue';
@@ -132,8 +129,7 @@ const bodyRef = ref<HTMLElement | null>(null);
 const themeAuto = ref(true);
 const themeSwatches = ['#5FBEDC', '#F0995F', '#A27FC2', '#EDDF55', '#D5B84A', '#171512'];
 const autoPalette = ['#5FBEDC', '#F0995F', '#A27FC2', '#EDDF55'];
-
-const form = reactive({
+const appForm = ref({
   appKey: '',
   name: '',
   category: '',
@@ -150,12 +146,12 @@ const form = reactive({
 });
 
 function addFeature(): void {
-  if (form.features.length >= 8) return;
-  form.features.push({ title: '', description: '' });
+  if (appForm.value.features.length >= 8) return;
+  appForm.value.features.push({ title: '', description: '' });
 }
 
 function removeFeature(index: number): void {
-  form.features.splice(index, 1);
+  appForm.value.features.splice(index, 1);
 }
 
 function autoColorForKey(key: string): string {
@@ -170,29 +166,29 @@ function onThemeColorChange(value: string | null): void {
     return;
   }
   themeAuto.value = false;
-  form.themeColor = value;
+  appForm.value.themeColor = value;
 }
 
 function useAutoTheme(): void {
   themeAuto.value = true;
-  form.themeColor = autoColorForKey(form.appKey);
+  appForm.value.themeColor = autoColorForKey(appForm.value.appKey);
 }
 
 function fill(row: AppRow | null): void {
-  form.appKey = row?.appKey ?? '';
-  form.name = row?.name ?? '';
-  form.category = row?.category ?? '';
-  form.iconUrl = row?.iconUrl ?? '';
-  form.repoUrl = row?.repoUrl ?? '';
-  form.homepage = row?.homepage ?? '';
-  form.docsUrl = row?.docsUrl ?? '';
-  form.releaseUrl = row?.releaseUrl ?? '';
+  appForm.value.appKey = row?.appKey ?? '';
+  appForm.value.name = row?.name ?? '';
+  appForm.value.category = row?.category ?? '';
+  appForm.value.iconUrl = row?.iconUrl ?? '';
+  appForm.value.repoUrl = row?.repoUrl ?? '';
+  appForm.value.homepage = row?.homepage ?? '';
+  appForm.value.docsUrl = row?.docsUrl ?? '';
+  appForm.value.releaseUrl = row?.releaseUrl ?? '';
   themeAuto.value = !row?.themeColor;
-  form.themeColor = row?.themeColor ?? autoColorForKey(row?.appKey ?? '');
-  form.description = row?.description ?? '';
-  form.tagline = row?.tagline ?? '';
-  form.features = (row?.features ?? []).map((item) => ({ ...item }));
-  form.screenshots = [...(row?.screenshots ?? [])];
+  appForm.value.themeColor = row?.themeColor ?? autoColorForKey(row?.appKey ?? '');
+  appForm.value.description = row?.description ?? '';
+  appForm.value.tagline = row?.tagline ?? '';
+  appForm.value.features = (row?.features ?? []).map((item) => ({ ...item }));
+  appForm.value.screenshots = [...(row?.screenshots ?? [])];
 }
 
 watch(
@@ -209,39 +205,39 @@ watch(
 );
 
 watch(
-  () => form.appKey,
+  () => appForm.value.appKey,
   (key: string) => {
-    if (themeAuto.value) form.themeColor = autoColorForKey(key);
+    if (themeAuto.value) appForm.value.themeColor = autoColorForKey(key);
   },
 );
 
 async function save(): Promise<void> {
-  if (!form.appKey || !form.name) {
+  if (!appForm.value.appKey || !appForm.value.name) {
     message.warning('appKey 与名称必填');
     return;
   }
   saving.value = true;
   try {
     const payload = {
-      appKey: form.appKey,
-      name: form.name,
+      appKey: appForm.value.appKey,
+      name: appForm.value.name,
       // 可选字段留空时发送 null（而不是 undefined），否则 PATCH 会当作“不修改”而保留旧值
-      category: form.category.trim() || null,
-      iconUrl: form.iconUrl.trim() || null,
-      repoUrl: form.repoUrl.trim() || null,
-      homepage: form.homepage.trim() || null,
-      docsUrl: form.docsUrl.trim() || null,
-      releaseUrl: form.releaseUrl.trim() || null,
-      themeColor: themeAuto.value ? null : form.themeColor || null,
-      description: form.description.trim() || null,
-      tagline: form.tagline.trim() || null,
-      features: form.features
+      category: appForm.value.category.trim() || null,
+      iconUrl: appForm.value.iconUrl.trim() || null,
+      repoUrl: appForm.value.repoUrl.trim() || null,
+      homepage: appForm.value.homepage.trim() || null,
+      docsUrl: appForm.value.docsUrl.trim() || null,
+      releaseUrl: appForm.value.releaseUrl.trim() || null,
+      themeColor: themeAuto.value ? null : appForm.value.themeColor || null,
+      description: appForm.value.description.trim() || null,
+      tagline: appForm.value.tagline.trim() || null,
+      features: appForm.value.features
         .filter((item) => item.title.trim())
         .map((item) => ({
           title: item.title.trim(),
           description: item.description.trim(),
         })),
-      screenshots: form.screenshots,
+      screenshots: appForm.value.screenshots,
     };
     if (props.editing) {
       await api.apps.update(props.editing.id, payload);

@@ -3,7 +3,9 @@
     <div class="confirm-card" role="dialog" aria-modal="true">
       <p class="hud">UNINSTALL / {{ target.appKey }}</p>
       <h2>卸载 {{ target.name }}？</h2>
-      <p class="confirm-desc">将删除 <code>{{ target.installPath }}</code>。</p>
+      <p class="confirm-desc">
+        将删除 <code>{{ target.installPath }}</code>。
+      </p>
       <label class="confirm-option">
         <input v-model="deleteData" type="checkbox" />
         <span>同时删除应用数据与设置（不可恢复）</span>

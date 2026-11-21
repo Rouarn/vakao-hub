@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { compare, hash } from 'bcryptjs';
@@ -46,9 +40,7 @@ export class AuthService implements OnModuleInit {
         createdAt: Date.now(),
       }),
     );
-    this.logger.warn(
-      `已创建管理员 ${env.admin.username}，请立即修改默认密码（管理端「修改密码」）`,
-    );
+    this.logger.warn(`已创建管理员 ${env.admin.username}，请立即修改默认密码（管理端「修改密码」）`);
   }
 
   async login(dto: LoginDto) {
@@ -58,9 +50,7 @@ export class AuthService implements OnModuleInit {
     const now = Date.now();
     if (user.lockedUntil && user.lockedUntil > now) {
       const minutes = Math.ceil((user.lockedUntil - now) / 60_000);
-      throw new UnauthorizedException(
-        `登录失败次数过多，请 ${minutes} 分钟后再试`,
-      );
+      throw new UnauthorizedException(`登录失败次数过多，请 ${minutes} 分钟后再试`);
     }
 
     const matched = await compare(dto.password, user.passwordHash);
@@ -70,9 +60,7 @@ export class AuthService implements OnModuleInit {
         user.failedLoginAttempts = 0;
         user.lockedUntil = now + LOCK_DURATION_MS;
         await this.users.save(user);
-        throw new UnauthorizedException(
-          `登录失败次数过多，账号已锁定 ${LOCK_DURATION_MS / 60_000} 分钟`,
-        );
+        throw new UnauthorizedException(`登录失败次数过多，账号已锁定 ${LOCK_DURATION_MS / 60_000} 分钟`);
       }
       await this.users.save(user);
       throw new UnauthorizedException('用户名或密码错误');
@@ -101,10 +89,7 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async changePassword(
-    userId: number,
-    dto: ChangePasswordDto,
-  ): Promise<{ success: true }> {
+  async changePassword(userId: number, dto: ChangePasswordDto): Promise<{ success: true }> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('管理员不存在');
 

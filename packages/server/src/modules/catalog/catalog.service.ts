@@ -12,10 +12,7 @@ import {
 import { env } from '../../config/env.js';
 import { AppEntity } from '../../database/entities/app.entity.js';
 import { ArtifactEntity } from '../../database/entities/artifact.entity.js';
-import {
-  RELEASE_STATUS,
-  ReleaseEntity,
-} from '../../database/entities/release.entity.js';
+import { RELEASE_STATUS, ReleaseEntity } from '../../database/entities/release.entity.js';
 
 interface CatalogEntry {
   app: AppEntity;
@@ -33,15 +30,9 @@ const CACHE_TTL_MS = 10_000;
 
 @Injectable()
 export class CatalogService {
-  private readonly catalogCache = new Map<
-    string,
-    { expiresAt: number; entries: CatalogEntry[] }
-  >();
+  private readonly catalogCache = new Map<string, { expiresAt: number; entries: CatalogEntry[] }>();
 
-  private readonly summaryCache = new Map<
-    string,
-    { expiresAt: number; value: CatalogSummary }
-  >();
+  private readonly summaryCache = new Map<string, { expiresAt: number; value: CatalogSummary }>();
 
   constructor(
     @InjectRepository(AppEntity)
@@ -52,12 +43,7 @@ export class CatalogService {
     private readonly artifacts: Repository<ArtifactEntity>,
   ) {}
 
-  async list(
-    platform: string,
-    arch: string,
-    channel: string,
-    req: Request,
-  ): Promise<CatalogResponse> {
+  async list(platform: string, arch: string, channel: string, req: Request): Promise<CatalogResponse> {
     const entries = await this.loadEntries(platform, arch, channel);
     return {
       platform: platform as CatalogResponse['platform'],
@@ -88,9 +74,7 @@ export class CatalogService {
       where: { releaseId: In(releases.map((release) => release.id)) },
     });
 
-    const appIdByRelease = new Map(
-      releases.map((release) => [release.id, release.appId]),
-    );
+    const appIdByRelease = new Map(releases.map((release) => [release.id, release.appId]));
     const platformsByApp = new Map<number, Set<string>>();
     for (const artifact of artifacts) {
       const appId = appIdByRelease.get(artifact.releaseId);
@@ -111,11 +95,7 @@ export class CatalogService {
     return value;
   }
 
-  private async loadEntries(
-    platform: string,
-    arch: string,
-    channel: string,
-  ): Promise<CatalogEntry[]> {
+  private async loadEntries(platform: string, arch: string, channel: string): Promise<CatalogEntry[]> {
     const key = `${platform}|${arch}|${channel}`;
     const cached = this.catalogCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.entries;
@@ -126,11 +106,7 @@ export class CatalogService {
   }
 
   /** 一次取回应用、版本、产物后在内存里聚合，避免每个应用各查两次。 */
-  private async queryEntries(
-    platform: string,
-    arch: string,
-    channel: string,
-  ): Promise<CatalogEntry[]> {
+  private async queryEntries(platform: string, arch: string, channel: string): Promise<CatalogEntry[]> {
     const apps = await this.apps.find({ order: { name: 'ASC' } });
     if (!apps.length) return [];
 
@@ -161,10 +137,7 @@ export class CatalogService {
       usableByRelease.set(artifact.releaseId, list);
     }
     for (const list of usableByRelease.values()) {
-      list.sort(
-        (left, right) =>
-          artifactScore(left, platform, arch) - artifactScore(right, platform, arch),
-      );
+      list.sort((left, right) => artifactScore(left, platform, arch) - artifactScore(right, platform, arch));
     }
 
     // releases 已按 versionCode 倒序，每个应用取第一条在该平台架构有产物的版本。
@@ -194,9 +167,7 @@ export class CatalogService {
     if (!value) return null;
     if (/^https?:\/\//i.test(value)) return value;
     if (!value.startsWith('/')) return value;
-    const base =
-      env.publicBaseUrl ||
-      `${req.protocol}://${req.get('host') ?? 'localhost'}`;
+    const base = env.publicBaseUrl || `${req.protocol}://${req.get('host') ?? 'localhost'}`;
     return `${base.replace(/\/$/, '')}${value}`;
   }
 
@@ -216,9 +187,7 @@ export class CatalogService {
       themeColor: app.themeColor,
       tagline: app.tagline,
       features: app.features,
-      screenshots:
-        app.screenshots?.map((item) => this.absoluteMedia(item, req) ?? item) ??
-        null,
+      screenshots: app.screenshots?.map((item) => this.absoluteMedia(item, req) ?? item) ?? null,
       latest: {
         id: release.id,
         versionName: release.versionName,
@@ -234,14 +203,9 @@ export class CatalogService {
     };
   }
 
-  private toArtifactSummary(
-    artifact: ArtifactEntity,
-    req: Request,
-  ): ArtifactSummary {
+  private toArtifactSummary(artifact: ArtifactEntity, req: Request): ArtifactSummary {
     const path = `api/v1/updates/download/${artifact.id}`;
-    const downloadUrl = env.publicBaseUrl
-      ? `${env.publicBaseUrl}/${path}`
-      : `${this.requestOrigin(req)}/${path}`;
+    const downloadUrl = env.publicBaseUrl ? `${env.publicBaseUrl}/${path}` : `${this.requestOrigin(req)}/${path}`;
 
     return {
       id: artifact.id,
@@ -258,14 +222,8 @@ export class CatalogService {
   }
 
   private requestOrigin(req: Request): string {
-    const proto =
-      ((req.headers['x-forwarded-proto'] as string) ?? '')
-        .split(',')[0]
-        .trim() || req.protocol;
-    const host =
-      ((req.headers['x-forwarded-host'] as string) ?? '')
-        .split(',')[0]
-        .trim() || req.headers.host;
+    const proto = ((req.headers['x-forwarded-proto'] as string) ?? '').split(',')[0].trim() || req.protocol;
+    const host = ((req.headers['x-forwarded-host'] as string) ?? '').split(',')[0].trim() || req.headers.host;
     return `${proto}://${host}`;
   }
 }

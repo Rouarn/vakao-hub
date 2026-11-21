@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import vue from 'eslint-plugin-vue';
@@ -19,6 +20,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],
+  prettier,
   {
     files: ['**/*.vue'],
     languageOptions: {
@@ -32,11 +34,7 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      'packages/admin/**/*.{ts,vue}',
-      'packages/launcher/frontend/**/*.{ts,vue}',
-      'packages/website/**/*.js',
-    ],
+    files: ['packages/admin/**/*.{ts,vue}', 'packages/launcher/frontend/**/*.{ts,vue}', 'packages/website/**/*.js'],
     languageOptions: {
       globals: globals.browser,
     },
@@ -61,10 +59,7 @@ export default tseslint.config(
       'vue/singleline-html-element-content-newline': 'off',
       'vue/html-self-closing': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
 );

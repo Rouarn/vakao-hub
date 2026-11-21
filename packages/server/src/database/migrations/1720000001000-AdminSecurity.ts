@@ -17,9 +17,7 @@ export class AdminSecurity1720000001000 implements MigrationInterface {
     ];
     for (const [name, definition] of columns) {
       if (await queryRunner.hasColumn('hub_admin_users', name)) continue;
-      await queryRunner.query(
-        `ALTER TABLE \`hub_admin_users\` ADD COLUMN \`${name}\` ${definition}`,
-      );
+      await queryRunner.query(`ALTER TABLE \`hub_admin_users\` ADD COLUMN \`${name}\` ${definition}`);
     }
   }
 
@@ -27,9 +25,7 @@ export class AdminSecurity1720000001000 implements MigrationInterface {
     const columns = ['lockedUntil', 'failedLoginAttempts', 'tokenVersion'];
     for (const name of columns) {
       if (!(await queryRunner.hasColumn('hub_admin_users', name))) continue;
-      await queryRunner.query(
-        `ALTER TABLE \`hub_admin_users\` DROP COLUMN \`${name}\``,
-      );
+      await queryRunner.query(`ALTER TABLE \`hub_admin_users\` DROP COLUMN \`${name}\``);
     }
   }
 }

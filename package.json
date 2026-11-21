@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.16.1",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
-    "node": ">=22.18.0",
-    "pnpm": ">=10.15.0"
+    "node": ">=26.13.1",
+    "pnpm": ">=12.21.0"
   },
   "scripts": {
     "dev": "pnpm build:shared && pnpm --parallel --filter @vakao/hub-server --filter @vakao/hub-admin dev",
@@ -16,13 +16,30 @@
     "build:shared": "pnpm --filter @vakao/hub-shared build",
     "build": "pnpm build:shared && pnpm --filter @vakao/hub-server build && pnpm --filter @vakao/hub-admin build",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "prepare": "husky",
     "website": "python3 -m http.server 5200 --directory packages/website"
   },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,tsx,vue}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,scss,html}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.14.0",
-    "eslint-plugin-vue": "^10.12.0",
-    "globals": "^17.14.0",
-    "typescript-eslint": "^8.72.1"
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-vue": "10.12.1",
+    "globals": "17.14.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.1",
+    "prettier": "3.10.1",
+    "typescript-eslint": "8.73.0"
   }
 }

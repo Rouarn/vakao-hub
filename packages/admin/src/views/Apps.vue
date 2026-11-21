@@ -39,9 +39,7 @@ const columns: DataTableColumns<AppRow> = [
     title: '仓库',
     key: 'repoUrl',
     render: (row) =>
-      row.repoUrl
-        ? h('a', { href: row.repoUrl, target: '_blank', rel: 'noreferrer' }, row.repoUrl)
-        : '—',
+      row.repoUrl ? h('a', { href: row.repoUrl, target: '_blank', rel: 'noreferrer' }, row.repoUrl) : '—',
   },
   {
     title: '创建时间',
@@ -54,12 +52,20 @@ const columns: DataTableColumns<AppRow> = [
     key: 'actions',
     width: 150,
     render: (row) =>
-      h(NSpace, { size: 8 }, {
-        default: () => [
-          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
-          h(NButton, { size: 'small', type: 'error', secondary: true, onClick: () => confirmRemove(row) }, { default: () => '删除' }),
-        ],
-      }),
+      h(
+        NSpace,
+        { size: 8 },
+        {
+          default: () => [
+            h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
+            h(
+              NButton,
+              { size: 'small', type: 'error', secondary: true, onClick: () => confirmRemove(row) },
+              { default: () => '删除' },
+            ),
+          ],
+        },
+      ),
   },
 ];
 

@@ -1,12 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Min,
-} from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
 import { ARCHES, CHANNELS, PLATFORMS } from '@vakao/hub-shared';
 
 export class CheckUpdateQueryDto {

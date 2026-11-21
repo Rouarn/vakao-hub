@@ -59,15 +59,7 @@
               size="large"
             />
           </n-form-item>
-          <n-button
-            type="primary"
-            block
-            size="large"
-            :loading="loading"
-            attr-type="submit"
-          >
-            登录
-          </n-button>
+          <n-button type="primary" block size="large" :loading="loading" attr-type="submit"> 登录 </n-button>
         </n-form>
 
         <div class="login-meta">

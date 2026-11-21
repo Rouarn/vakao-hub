@@ -81,17 +81,17 @@ chmod 600 .env
 
 必改/必查：
 
-| 键 | 说明 |
-| --- | --- |
-| `NODE_ENV` | `production` |
-| `PORT` | `31888`（与宝塔 Node 项目端口一致） |
-| `WEB_DIR` | `/www/wwwroot/vakao-hub/web` |
-| `STORAGE_DIR` | `/www/wwwroot/vakao-hub/storage` |
-| `DB_*` | 数据库连接，`DB_SYNCHRONIZE=false` |
-| `JWT_SECRET` | ≥ 32 字符 |
-| `ADMIN_PASSWORD` | ≥ 8 位 |
-| `PUBLIC_BASE_URL` | 对外 HTTPS 地址，不带 `/api` |
-| `CORS_ORIGINS` | 同域部署时可不填 |
+| 键                | 说明                                |
+| ----------------- | ----------------------------------- |
+| `NODE_ENV`        | `production`                        |
+| `PORT`            | `31888`（与宝塔 Node 项目端口一致） |
+| `WEB_DIR`         | `/www/wwwroot/vakao-hub/web`        |
+| `STORAGE_DIR`     | `/www/wwwroot/vakao-hub/storage`    |
+| `DB_*`            | 数据库连接，`DB_SYNCHRONIZE=false`  |
+| `JWT_SECRET`      | ≥ 32 字符                           |
+| `ADMIN_PASSWORD`  | ≥ 8 位                              |
+| `PUBLIC_BASE_URL` | 对外 HTTPS 地址，不带 `/api`        |
+| `CORS_ORIGINS`    | 同域部署时可不填                    |
 
 生产环境会硬校验占位值，示例里的 `replace-with-…` 会导致启动失败。
 
@@ -147,16 +147,16 @@ HTTPS 用宝塔「SSL」申请，再开「强制 HTTPS」；挡在前面的是 E
 
 宝塔 → 网站 → Node 项目 → 添加：
 
-| 字段 | 值 |
-| --- | --- |
-| 项目名称 | `vakao-hub` |
-| 项目目录 | `/www/wwwroot/vakao-hub/app` |
-| 项目端口 | `31888` |
-| 启动方式 | node → `dist/main.js` |
-| Node 版本 | v24.21.0 |
-| 运行用户 | `www` |
-| 安装依赖 | 否（已就绪） |
-| 守护进程 / 开机自启 | 勾上 |
+| 字段                | 值                           |
+| ------------------- | ---------------------------- |
+| 项目名称            | `vakao-hub`                  |
+| 项目目录            | `/www/wwwroot/vakao-hub/app` |
+| 项目端口            | `31888`                      |
+| 启动方式            | node → `dist/main.js`        |
+| Node 版本           | v24.21.0                     |
+| 运行用户            | `www`                        |
+| 安装依赖            | 否（已就绪）                 |
+| 守护进程 / 开机自启 | 勾上                         |
 
 日志实际由宝塔写入 `/www/wwwlogs/nodejs/vakao-hub.log`（启动、迁移与运行时输出）。
 为了在项目目录里也能直接看，`logs/vakao-hub.log` 是指向它的软链：
@@ -187,10 +187,10 @@ tail -f /www/wwwroot/vakao-hub/logs/vakao-hub.log
 
 ## 12. 排障
 
-| 现象 | 先看 |
-| --- | --- |
-| 全站 502 | Node 项目是否在运行、`/www/wwwlogs/nodejs/vakao-hub.log` |
-| `/api` 正常但页面 404 | `web/site`、`web/admin` 是否上传到位 |
-| 下载 404 | `STORAGE_DIR` 与实际目录是否一致、`storage/<appKey>/…` 是否存在 |
-| 下载计数不涨 | 是否被 CDN 缓存（响应头应为 `Cache-Control: no-store`） |
-| 下载计数翻倍 | EdgeOne 偶尔对同一次下载回源两次；服务端已按「产物 + 来源 IP + 10 秒」去重 |
+| 现象                  | 先看                                                                       |
+| --------------------- | -------------------------------------------------------------------------- |
+| 全站 502              | Node 项目是否在运行、`/www/wwwlogs/nodejs/vakao-hub.log`                   |
+| `/api` 正常但页面 404 | `web/site`、`web/admin` 是否上传到位                                       |
+| 下载 404              | `STORAGE_DIR` 与实际目录是否一致、`storage/<appKey>/…` 是否存在            |
+| 下载计数不涨          | 是否被 CDN 缓存（响应头应为 `Cache-Control: no-store`）                    |
+| 下载计数翻倍          | EdgeOne 偶尔对同一次下载回源两次；服务端已按「产物 + 来源 IP + 10 秒」去重 |

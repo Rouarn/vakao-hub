@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  NotFoundException,
-  Param,
-  ParseIntPipe,
-  Post,
-  Query,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/public.decorator.js';
@@ -63,10 +52,7 @@ export class UpdatesController {
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const { artifact } = await this.updatesService.getDownloadable(
-      id,
-      query.deviceId,
-    );
+    const { artifact } = await this.updatesService.getDownloadable(id, query.deviceId);
     const fullPath = resolveStoragePath(artifact.relPath);
 
     let served = false;
@@ -82,12 +68,7 @@ export class UpdatesController {
     }
 
     // 只在真正开始传输完整文件时计数：304/416 不算下载，断点续传的分段请求也不重复计数
-    if (
-      served &&
-      req.method === 'GET' &&
-      !req.headers.range &&
-      shouldCountDownload(id, req.ip ?? 'unknown')
-    ) {
+    if (served && req.method === 'GET' && !req.headers.range && shouldCountDownload(id, req.ip ?? 'unknown')) {
       await this.updatesService.countDownload(id).catch(() => undefined);
     }
   }

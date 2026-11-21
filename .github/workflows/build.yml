@@ -13,11 +13,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 12.16.1
+          version: 12.21.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install
@@ -43,17 +43,24 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: packages/launcher/go.sum
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.21.0
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: packages/launcher/frontend/package-lock.json
+          node-version: 26.13.1
+          cache: pnpm
 
       # main.go 用 go:embed 内嵌 frontend/dist，而 dist 是构建产物不入库，
       # 不先构建前端时 go build 会报 "pattern all:frontend/dist: no matching files found"
+      - name: Install frontend dependencies
+        working-directory: ${{ github.workspace }}
+        run: pnpm install --frozen-lockfile
+
       - name: Build frontend
-        working-directory: packages/launcher/frontend
-        run: npm ci && npm run build
+        working-directory: ${{ github.workspace }}
+        run: pnpm --filter frontend build
 
       - name: Build
         run: go build ./...

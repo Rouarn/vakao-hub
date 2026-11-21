@@ -52,11 +52,11 @@ build/bin/VaKaoHub.app
 
 ## 平台安装策略
 
-| 平台 | 支持格式 | 安装位置 |
-| --- | --- | --- |
-| macOS | dmg、zip | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制） |
+| 平台    | 支持格式      | 安装位置                                                                    |
+| ------- | ------------- | --------------------------------------------------------------------------- |
+| macOS   | dmg、zip      | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制）                       |
 | Windows | zip、msi、exe | zip 解压到 `%AppData%\VaKaoHub\apps\<appKey>`；msi 静默安装；exe 调起安装器 |
-| Linux | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications` |
+| Linux   | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications`                 |
 
 macOS 使用内置 `hdiutil`/`ditto`，不修改系统安全设置；未公证的应用首次启动仍可能被 Gatekeeper 拦截，启动失败时应用会提示「右键 → 打开」或到系统设置放行。要彻底消除提示，需要 Apple Developer Program（Developer ID 签名 + 公证）。
 

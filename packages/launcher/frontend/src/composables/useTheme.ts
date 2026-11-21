@@ -21,18 +21,18 @@ function initialThemeMode(): ThemeMode {
 }
 
 export function useTheme() {
-  const theme = ref<'light' | 'dark'>(
-    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
-  );
+  const theme = ref<'light' | 'dark'>(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   const themeMode = ref<ThemeMode>(initialThemeMode());
 
   function applyNativeTheme(next: 'light' | 'dark'): void {
-    const runtime = (window as Window & {
-      runtime?: {
-        WindowSetDarkTheme?: () => void;
-        WindowSetLightTheme?: () => void;
-      };
-    }).runtime;
+    const runtime = (
+      window as Window & {
+        runtime?: {
+          WindowSetDarkTheme?: () => void;
+          WindowSetLightTheme?: () => void;
+        };
+      }
+    ).runtime;
     if (next === 'dark') runtime?.WindowSetDarkTheme?.();
     else runtime?.WindowSetLightTheme?.();
   }

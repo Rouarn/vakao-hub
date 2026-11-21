@@ -30,10 +30,7 @@ export class MediaController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传图标或详情页截图（≤5MB，PNG/JPEG/WebP）' })
-  async upload(
-    @Body() dto: UploadMediaDto,
-    @UploadedFile() file?: Express.Multer.File,
-  ) {
+  async upload(@Body() dto: UploadMediaDto, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('缺少文件');
     return this.media.save(dto.scope, dto.appKey, file);
   }

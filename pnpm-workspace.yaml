@@ -1,5 +1,6 @@
 packages:
   - 'packages/*'
+  - 'packages/launcher/frontend'
 
 # pnpm 12：允许安装期构建脚本的依赖（esbuild 是 Vite 的必需依赖）
 allowBuilds:

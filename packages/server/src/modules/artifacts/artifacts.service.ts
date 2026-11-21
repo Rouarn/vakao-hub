@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { rm, rename, stat, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
@@ -39,10 +34,7 @@ export class ArtifactsService {
     private readonly apps: Repository<AppEntity>,
   ) {}
 
-  async upload(
-    dto: UploadArtifactDto,
-    file: Express.Multer.File | undefined,
-  ): Promise<ArtifactEntity> {
+  async upload(dto: UploadArtifactDto, file: Express.Multer.File | undefined): Promise<ArtifactEntity> {
     if (!file) throw new BadRequestException('请上传文件（字段名 file）');
 
     const release = await this.releases.findOne({
@@ -58,9 +50,7 @@ export class ArtifactsService {
 
     const allowedPlatforms = FORMAT_PLATFORM[dto.format];
     if (!allowedPlatforms || !allowedPlatforms.includes(dto.platform)) {
-      throw new BadRequestException(
-        `格式 ${dto.format} 不能用于平台 ${dto.platform}`,
-      );
+      throw new BadRequestException(`格式 ${dto.format} 不能用于平台 ${dto.platform}`);
     }
 
     const lowerName = file.originalname.toLowerCase();
@@ -83,43 +73,37 @@ export class ArtifactsService {
 
       const magicOk = await validateArtifactFile(file.path, dto.format);
       if (!magicOk) {
-        throw new BadRequestException(
-          `文件内容与 ${dto.format} 格式不匹配，请检查上传文件`,
-        );
+        throw new BadRequestException(`文件内容与 ${dto.format} 格式不匹配，请检查上传文件`);
       }
 
       const sha256 = await sha256File(file.path);
       const info = await stat(file.path);
       // 历史版本可能存有未校验的 versionName，目录名同样做安全化，防止 ../ 逃逸
-      const versionDir = safeFileName(
-        `v${release.versionCode}_${release.versionName}`,
-      );
+      const versionDir = safeFileName(`v${release.versionCode}_${release.versionName}`);
       const dir = join(env.storageDir, app.appKey, versionDir);
       await mkdir(dir, { recursive: true });
 
-      const fileName = safeFileName(
-        `${dto.platform}-${dto.arch}-${dto.format}-${file.originalname}`,
-      );
+      const fileName = safeFileName(`${dto.platform}-${dto.arch}-${dto.format}-${file.originalname}`);
       const finalPath = join(dir, fileName);
       await rename(file.path, finalPath);
 
       try {
         return await this.artifacts.save(
-        this.artifacts.create({
-          releaseId: release.id,
-          platform: dto.platform,
-          arch: dto.arch,
-          format: dto.format,
-          fileName: file.originalname,
-          relPath: relative(env.storageDir, finalPath),
-          size: info.size,
-          sha256,
-          minOs: dto.minOs ?? null,
-          notarized: dto.notarized === 'true' || dto.notarized === '1' ? 1 : 0,
-          downloadCount: 0,
-          createdAt: Date.now(),
-        }),
-      );
+          this.artifacts.create({
+            releaseId: release.id,
+            platform: dto.platform,
+            arch: dto.arch,
+            format: dto.format,
+            fileName: file.originalname,
+            relPath: relative(env.storageDir, finalPath),
+            size: info.size,
+            sha256,
+            minOs: dto.minOs ?? null,
+            notarized: dto.notarized === 'true' || dto.notarized === '1' ? 1 : 0,
+            downloadCount: 0,
+            createdAt: Date.now(),
+          }),
+        );
       } catch (error) {
         await rm(finalPath, { force: true }).catch(() => undefined);
         throw error;

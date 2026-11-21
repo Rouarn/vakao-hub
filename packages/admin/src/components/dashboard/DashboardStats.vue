@@ -1,11 +1,6 @@
 <template>
   <section class="stat-grid">
-    <article
-      v-for="(card, index) in cards"
-      :key="card.label"
-      class="stat-card"
-      :class="{ featured: index === 0 }"
-    >
+    <article v-for="(card, index) in cards" :key="card.label" class="stat-card" :class="{ featured: index === 0 }">
       <div class="stat-top">
         <span class="hud">{{ card.hud }}</span>
         <span class="stat-index">{{ String(index + 1).padStart(2, '0') }}</span>

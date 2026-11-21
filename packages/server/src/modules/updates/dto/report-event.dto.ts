@@ -1,17 +1,6 @@
 import { Type } from 'class-transformer';
-import {
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Min,
-} from 'class-validator';
-import {
-  ARCHES,
-  EVENT_TYPES,
-  PLATFORMS,
-} from '@vakao/hub-shared';
+import { IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
+import { ARCHES, EVENT_TYPES, PLATFORMS } from '@vakao/hub-shared';
 
 export class ReportEventDto {
   @IsString()

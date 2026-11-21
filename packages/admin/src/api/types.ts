@@ -1,11 +1,4 @@
-import type {
-  Arch,
-  ArtifactFormat,
-  Channel,
-  EventType,
-  Platform,
-  ReleaseStatus,
-} from '@vakao/hub-shared';
+import type { Arch, ArtifactFormat, Channel, EventType, Platform, ReleaseStatus } from '@vakao/hub-shared';
 
 export type { Paginated } from '@vakao/hub-shared';
 

@@ -15,14 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import {
-  NConfigProvider,
-  NDialogProvider,
-  NMessageProvider,
-  darkTheme,
-  dateZhCN,
-  zhCN,
-} from 'naive-ui';
+import { NConfigProvider, NDialogProvider, NMessageProvider, darkTheme, dateZhCN, zhCN } from 'naive-ui';
 import { createThemeOverrides } from './theme';
 import { useTheme } from './composables/useTheme';
 

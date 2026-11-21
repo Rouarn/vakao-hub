@@ -81,11 +81,7 @@
       @request-uninstall="requestUninstall"
     />
 
-    <StatusBar
-      :last-checked-label="lastCheckedLabel"
-      :service-online="serviceOnline"
-      @open-url="openUrl"
-    />
+    <StatusBar :last-checked-label="lastCheckedLabel" :service-online="serviceOnline" @open-url="openUrl" />
 
     <SettingsModal
       v-model:base-url="draftBaseUrl"
@@ -137,7 +133,6 @@ import UninstallDialog from './components/UninstallDialog.vue';
 import { useTheme } from './composables/useTheme';
 import { appColor, hexToRgba, shadeColor } from './lib/theme';
 import { compareVersion } from './lib/version';
-
 
 const apps = ref<AppView[]>([]);
 const platform = ref('');
@@ -219,11 +214,9 @@ const visibleApps = computed(() => {
   return list.sort((left, right) => {
     if (sortBy.value === 'name') return left.name.localeCompare(right.name, 'zh-CN');
     if (sortBy.value === 'status') {
-      return Number(right.installed) - Number(left.installed) ||
-        Number(right.hasUpdate) - Number(left.hasUpdate);
+      return Number(right.installed) - Number(left.installed) || Number(right.hasUpdate) - Number(left.hasUpdate);
     }
-    return right.latestVersionCode - left.latestVersionCode ||
-      left.name.localeCompare(right.name, 'zh-CN');
+    return right.latestVersionCode - left.latestVersionCode || left.name.localeCompare(right.name, 'zh-CN');
   });
 });
 
@@ -502,9 +495,11 @@ async function saveSettings(): Promise<void> {
 function reveal(app: AppView): Promise<void> {
   menuKey.value = '';
   error.value = '';
-  return api().Reveal(app.appKey).catch((cause: unknown) => {
-    error.value = (cause as Error).message;
-  });
+  return api()
+    .Reveal(app.appKey)
+    .catch((cause: unknown) => {
+      error.value = (cause as Error).message;
+    });
 }
 
 function openUrl(url: string): void {
@@ -561,23 +556,28 @@ function restartRefreshTimer(): void {
   if (refreshTimer) window.clearInterval(refreshTimer);
   refreshTimer = undefined;
   if (refreshMinutes.value <= 0) return;
-  refreshTimer = window.setInterval(() => {
-    if (!document.hidden && !loading.value) {
-      void load();
-    }
-  }, refreshMinutes.value * 60 * 1000);
+  refreshTimer = window.setInterval(
+    () => {
+      if (!document.hidden && !loading.value) {
+        void load();
+      }
+    },
+    refreshMinutes.value * 60 * 1000,
+  );
 }
 
 onMounted(() => {
   void load();
   window.addEventListener('click', closeMenu);
   window.addEventListener('keydown', onKeydown);
-  const runtime = (window as unknown as {
-    runtime?: {
-      EventsOn(name: string, callback: (payload: Progress) => void): void;
-      EventsOff(name: string): void;
-    };
-  }).runtime;
+  const runtime = (
+    window as unknown as {
+      runtime?: {
+        EventsOn(name: string, callback: (payload: Progress) => void): void;
+        EventsOff(name: string): void;
+      };
+    }
+  ).runtime;
   runtime?.EventsOn('install:progress', onProgress);
 
   restartRefreshTimer();
@@ -591,9 +591,11 @@ onUnmounted(() => {
   if (clockTimer) window.clearInterval(clockTimer);
   window.removeEventListener('click', closeMenu);
   window.removeEventListener('keydown', onKeydown);
-  const runtime = (window as unknown as {
-    runtime?: { EventsOff(name: string): void };
-  }).runtime;
+  const runtime = (
+    window as unknown as {
+      runtime?: { EventsOff(name: string): void };
+    }
+  ).runtime;
   runtime?.EventsOff('install:progress');
 });
 </script>

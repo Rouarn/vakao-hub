@@ -1,22 +1,13 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request } from 'express';
 import { Repository } from 'typeorm';
-import type {
-  ArtifactSummary,
-  CheckResult,
-} from '@vakao/hub-shared';
+import type { ArtifactSummary, CheckResult } from '@vakao/hub-shared';
 import { env } from '../../config/env.js';
 import { AppEntity } from '../../database/entities/app.entity.js';
 import { ArtifactEntity } from '../../database/entities/artifact.entity.js';
 import { ClientEventEntity } from '../../database/entities/client-event.entity.js';
-import {
-  RELEASE_STATUS,
-  ReleaseEntity,
-} from '../../database/entities/release.entity.js';
+import { RELEASE_STATUS, ReleaseEntity } from '../../database/entities/release.entity.js';
 import type { CheckUpdateQueryDto } from './dto/check-update-query.dto.js';
 import { grayHit } from './gray.js';
 import { pickArtifact as pickPreferredArtifact } from '@vakao/hub-shared';
@@ -47,18 +38,8 @@ export class UpdatesService {
       RELEASE_STATUS.PUBLISHED,
     ]);
 
-    if (
-      release &&
-      release.status === RELEASE_STATUS.GRAY &&
-      !grayHit(query.deviceId, release.grayPercent)
-    ) {
-      release = await this.findLatest(
-        app.id,
-        channel,
-        query.platform,
-        arch,
-        [RELEASE_STATUS.PUBLISHED],
-      );
+    if (release && release.status === RELEASE_STATUS.GRAY && !grayHit(query.deviceId, release.grayPercent)) {
+      release = await this.findLatest(app.id, channel, query.platform, arch, [RELEASE_STATUS.PUBLISHED]);
     }
 
     if (!release || query.versionCode >= release.versionCode) {
@@ -74,8 +55,7 @@ export class UpdatesService {
       versionCode: release.versionCode,
       versionName: release.versionName,
       channel: release.channel as 'stable' | 'beta',
-      forceUpdate:
-        release.forceUpdate === 1 || query.versionCode < release.minVersionCode,
+      forceUpdate: release.forceUpdate === 1 || query.versionCode < release.minVersionCode,
       minVersionCode: release.minVersionCode,
       updateLog: release.updateLog,
       publishedAt: release.publishedAt,
@@ -99,18 +79,11 @@ export class UpdatesService {
     const release = await this.releases.findOne({
       where: { id: artifact.releaseId },
     });
-    if (
-      !release ||
-      (release.status !== RELEASE_STATUS.GRAY &&
-        release.status !== RELEASE_STATUS.PUBLISHED)
-    ) {
+    if (!release || (release.status !== RELEASE_STATUS.GRAY && release.status !== RELEASE_STATUS.PUBLISHED)) {
       throw new NotFoundException('该版本已下架');
     }
     // 灰度版本只对命中灰度桶的设备开放下载，避免按产物 ID 猜地址绕过灰度
-    if (
-      release.status === RELEASE_STATUS.GRAY &&
-      !grayHit(deviceId, release.grayPercent)
-    ) {
+    if (release.status === RELEASE_STATUS.GRAY && !grayHit(deviceId, release.grayPercent)) {
       throw new NotFoundException('该版本未开放下载');
     }
     return { artifact, release };
@@ -182,31 +155,21 @@ export class UpdatesService {
         arch === 'universal'
           ? 'EXISTS (SELECT 1 FROM hub_artifacts a WHERE a.releaseId = r.id AND a.platform = :platform)'
           : 'EXISTS (SELECT 1 FROM hub_artifacts a WHERE a.releaseId = r.id AND a.platform = :platform AND (a.arch = :arch OR a.arch = :universal))',
-        arch === 'universal'
-          ? { platform }
-          : { platform, arch, universal: 'universal' },
+        arch === 'universal' ? { platform } : { platform, arch, universal: 'universal' },
       )
       .orderBy('r.versionCode', 'DESC')
       .limit(1)
       .getOne();
   }
 
-  private async pickArtifact(
-    releaseId: number,
-    platform: string,
-    arch: string,
-  ): Promise<ArtifactEntity | null> {
+  private async pickArtifact(releaseId: number, platform: string, arch: string): Promise<ArtifactEntity | null> {
     const rows = await this.artifacts.find({
       where: { releaseId, platform },
     });
     return pickPreferredArtifact(rows, platform, arch);
   }
 
-  private toArtifactSummary(
-    artifact: ArtifactEntity,
-    req: Request,
-    deviceId?: string,
-  ): ArtifactSummary {
+  private toArtifactSummary(artifact: ArtifactEntity, req: Request, deviceId?: string): ArtifactSummary {
     return {
       id: artifact.id,
       platform: artifact.platform as ArtifactSummary['platform'],
@@ -221,11 +184,7 @@ export class UpdatesService {
     };
   }
 
-  private buildDownloadUrl(
-    req: Request,
-    artifact: { id: number; sha256: string },
-    deviceId?: string,
-  ): string {
+  private buildDownloadUrl(req: Request, artifact: { id: number; sha256: string }, deviceId?: string): string {
     const path = `api/v1/updates/download/${artifact.id}`;
     // v= 内容指纹：产物变了 URL 就变，天然绕开 CDN 上的历史缓存
     const params = new URLSearchParams({ v: artifact.sha256.slice(0, 8) });
@@ -233,14 +192,8 @@ export class UpdatesService {
     const query = `?${params.toString()}`;
     if (env.publicBaseUrl) return `${env.publicBaseUrl}/${path}${query}`;
 
-    const proto =
-      ((req.headers['x-forwarded-proto'] as string) ?? '')
-        .split(',')[0]
-        .trim() || req.protocol;
-    const host =
-      ((req.headers['x-forwarded-host'] as string) ?? '')
-        .split(',')[0]
-        .trim() || req.headers.host;
+    const proto = ((req.headers['x-forwarded-proto'] as string) ?? '').split(',')[0].trim() || req.protocol;
+    const host = ((req.headers['x-forwarded-host'] as string) ?? '').split(',')[0].trim() || req.headers.host;
     return `${proto}://${host}/${path}${query}`;
   }
 }

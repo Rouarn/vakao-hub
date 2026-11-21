@@ -12,9 +12,7 @@ media.addEventListener('change', (event) => {
 });
 
 /** 用户选过就固定，否则跟随系统（由 tokens.css 的 media query 兜底）。 */
-export const isDark = computed(() =>
-  preference.value === 'system' ? systemDark.value : preference.value === 'dark',
-);
+export const isDark = computed(() => (preference.value === 'system' ? systemDark.value : preference.value === 'dark'));
 
 function readPreference(): ThemePreference {
   const saved = localStorage.getItem(STORAGE_KEY);

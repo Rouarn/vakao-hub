@@ -56,9 +56,7 @@
       <span class="hint">{{ progress.message }}</span>
     </div>
 
-    <p v-if="app.duplicates?.length" class="notice">
-      检测到 {{ app.duplicates.length + 1 }} 份安装，请保留一份。
-    </p>
+    <p v-if="app.duplicates?.length" class="notice">检测到 {{ app.duplicates.length + 1 }} 份安装，请保留一份。</p>
 
     <div class="card-bottom">
       <button
@@ -82,11 +80,7 @@
       <button v-if="app.homepage" @click="$emit('open-url', app.homepage)">打开主页</button>
       <button v-if="app.repoUrl" @click="$emit('open-url', app.repoUrl)">查看源码</button>
       <div v-if="app.installed && !app.running" class="menu-divider"></div>
-      <button
-        v-if="app.installed && !app.running"
-        class="danger"
-        @click="$emit('request-uninstall', app)"
-      >
+      <button v-if="app.installed && !app.running" class="danger" @click="$emit('request-uninstall', app)">
         卸载…
       </button>
     </div>

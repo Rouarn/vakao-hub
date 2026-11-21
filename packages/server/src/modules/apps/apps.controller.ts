@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppsService } from './apps.service.js';
 import { CreateAppDto } from './dto/create-app.dto.js';
@@ -32,10 +23,7 @@ export class AppsController {
 
   @Patch(':id')
   @ApiOperation({ summary: '更新应用' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateAppDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAppDto) {
     return this.appsService.update(id, dto);
   }
 

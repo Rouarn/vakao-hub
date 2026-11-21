@@ -5,9 +5,7 @@
         <p class="hud">FUNNEL / 30 DAYS</p>
         <h2>发布漏斗</h2>
       </div>
-      <span class="panel-note">
-        下载 {{ funnel?.rates.download ?? 0 }}% · 安装 {{ funnel?.rates.install ?? 0 }}%
-      </span>
+      <span class="panel-note"> 下载 {{ funnel?.rates.download ?? 0 }}% · 安装 {{ funnel?.rates.install ?? 0 }}% </span>
     </header>
 
     <div class="funnel">

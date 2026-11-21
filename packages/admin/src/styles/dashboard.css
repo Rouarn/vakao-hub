@@ -210,8 +210,6 @@
     grid-template-columns: repeat(3, 1fr);
   }
 
-
-
   .dashboard-grid {
     grid-template-columns: 1fr;
   }

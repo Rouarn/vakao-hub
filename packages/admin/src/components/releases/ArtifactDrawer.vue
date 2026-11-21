@@ -44,7 +44,9 @@
               <span class="file-mark" aria-hidden="true">↑</span>
               <span class="file-copy">
                 <strong>{{ form.file ? form.file.name : '选择或拖入安装产物' }}</strong>
-                <span>{{ form.file ? formatBytes(form.file.size) : '支持 APK、DMG、ZIP、MSI、EXE、AppImage、DEB' }}</span>
+                <span>{{
+                  form.file ? formatBytes(form.file.size) : '支持 APK、DMG、ZIP、MSI、EXE、AppImage、DEB'
+                }}</span>
               </span>
               <span class="file-browse">{{ form.file ? '更换' : '浏览' }}</span>
             </div>
@@ -60,8 +62,20 @@
 
 <script setup lang="ts">
 import {
-  NButton, NCheckbox, NDataTable, NDivider, NDrawer, NDrawerContent, NEmpty,
-  NForm, NFormItem, NInput, NSelect, NTag, useDialog, useMessage,
+  NButton,
+  NCheckbox,
+  NDataTable,
+  NDivider,
+  NDrawer,
+  NDrawerContent,
+  NEmpty,
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NTag,
+  useDialog,
+  useMessage,
 } from 'naive-ui';
 import type { DataTableColumns, SelectOption } from 'naive-ui';
 import { computed, h, reactive, ref, watch } from 'vue';
@@ -95,10 +109,21 @@ const form = reactive({
 });
 
 const formatOptionsByPlatform: Record<string, SelectOption[]> = {
-  darwin: [{ label: 'dmg', value: 'dmg' }, { label: 'zip', value: 'zip' }],
-  win32: [{ label: 'msi', value: 'msi' }, { label: 'exe', value: 'exe' }, { label: 'zip', value: 'zip' }],
+  darwin: [
+    { label: 'dmg', value: 'dmg' },
+    { label: 'zip', value: 'zip' },
+  ],
+  win32: [
+    { label: 'msi', value: 'msi' },
+    { label: 'exe', value: 'exe' },
+    { label: 'zip', value: 'zip' },
+  ],
   android: [{ label: 'apk', value: 'apk' }],
-  linux: [{ label: 'appimage', value: 'appimage' }, { label: 'deb', value: 'deb' }, { label: 'zip', value: 'zip' }],
+  linux: [
+    { label: 'appimage', value: 'appimage' },
+    { label: 'deb', value: 'deb' },
+    { label: 'zip', value: 'zip' },
+  ],
 };
 
 const platformOptions: SelectOption[] = [
@@ -146,20 +171,20 @@ const artifactColumns: DataTableColumns<ArtifactRow> = [
     title: '公证',
     key: 'notarized',
     width: 80,
-    render: (row) => row.notarized
-      ? h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => '已公证' })
-      : '—',
+    render: (row) =>
+      row.notarized ? h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => '已公证' }) : '—',
   },
   { title: '下载', key: 'downloadCount', width: 70 },
   {
     title: '操作',
     key: 'actions',
     width: 90,
-    render: (row) => h(
-      NButton,
-      { size: 'tiny', type: 'error', secondary: true, onClick: () => confirmRemoveArtifact(row) },
-      { default: () => '删除' },
-    ),
+    render: (row) =>
+      h(
+        NButton,
+        { size: 'tiny', type: 'error', secondary: true, onClick: () => confirmRemoveArtifact(row) },
+        { default: () => '删除' },
+      ),
   },
 ];
 
@@ -277,7 +302,9 @@ function confirmRemoveArtifact(row: ArtifactRow): void {
   border-radius: 7px;
   background: var(--raised-soft);
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
 }
 
 .file-drop:hover,

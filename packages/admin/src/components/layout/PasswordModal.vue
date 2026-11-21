@@ -1,5 +1,11 @@
 <template>
-  <n-modal :show="show" preset="card" title="修改管理员密码" style="width: 420px" @update:show="$emit('update:show', $event)">
+  <n-modal
+    :show="show"
+    preset="card"
+    title="修改管理员密码"
+    style="width: 420px"
+    @update:show="$emit('update:show', $event)"
+  >
     <n-form label-placement="top">
       <n-form-item label="原密码">
         <n-input v-model:value="form.oldPassword" type="password" show-password-on="click" />

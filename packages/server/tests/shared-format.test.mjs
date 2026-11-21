@@ -3,14 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import {
-  compareVersion,
-  formatBytes,
-  formatDate,
-  formatDateTime,
-  pickArtifact,
-  releaseUrl,
-} from '@vakao/hub-shared';
+import { compareVersion, formatBytes, formatDate, formatDateTime, pickArtifact, releaseUrl } from '@vakao/hub-shared';
 import {
   formatBytes as launcherFormatBytes,
   formatDate as launcherFormatDate,
@@ -44,10 +37,7 @@ test('compareVersion 忽略 v 前缀与预发布后缀', () => {
 
 test('releaseUrl 优先显式字段，其次由 repoUrl 推导', () => {
   assert.equal(releaseUrl({ releaseUrl: 'https://example.com/r' }), 'https://example.com/r');
-  assert.equal(
-    releaseUrl({ repoUrl: 'https://github.com/acme/app.git' }),
-    'https://github.com/acme/app/releases',
-  );
+  assert.equal(releaseUrl({ repoUrl: 'https://github.com/acme/app.git' }), 'https://github.com/acme/app/releases');
   assert.equal(releaseUrl({}), '');
 });
 
@@ -79,10 +69,7 @@ function extractFunction(source, name) {
   throw new Error(`无法解析 ${name}`);
 }
 
-const website = readFileSync(
-  fileURLToPath(new URL('../../website/app.js', import.meta.url)),
-  'utf8',
-);
+const website = readFileSync(fileURLToPath(new URL('../../website/app.js', import.meta.url)), 'utf8');
 const websiteFormatBytes = new Function(`return (${extractFunction(website, 'formatBytes')})`)();
 const websiteFormatDate = new Function(`return (${extractFunction(website, 'formatDate')})`)();
 
@@ -111,4 +98,3 @@ test('launcher 的版本比较副本实现和 shared 行为一致', () => {
     assert.equal(launcherCompareVersion(left, right), compareVersion(left, right));
   }
 });
-

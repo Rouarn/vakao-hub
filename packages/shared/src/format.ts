@@ -25,10 +25,7 @@ export function formatBytes(bytes: number | null | undefined): string {
     return '未知大小';
   }
   if (bytes === 0) return '0 B';
-  const index = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    BYTE_UNITS.length - 1,
-  );
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
   return `${(bytes / 1024 ** index).toFixed(1)} ${BYTE_UNITS[index]}`;
 }
 
@@ -74,10 +71,7 @@ export function compareVersion(left: string, right: string): number {
 }
 
 /** 发布页地址：优先显式 releaseUrl，其次用 repoUrl 推导，均缺失返回空串 */
-export function releaseUrl(app: {
-  releaseUrl?: string | null;
-  repoUrl?: string | null;
-}): string {
+export function releaseUrl(app: { releaseUrl?: string | null; repoUrl?: string | null }): string {
   if (app.releaseUrl) return app.releaseUrl;
   if (!app.repoUrl) return '';
   return `${app.repoUrl.replace(/\.git$/, '').replace(/\/$/, '')}/releases`;
@@ -90,11 +84,7 @@ interface ArtifactLike {
 }
 
 /** 产物排序分值：架构精确匹配优先（0/1），其次格式偏好顺序，未知格式排最后 */
-export function artifactScore(
-  artifact: ArtifactLike,
-  platform: string,
-  arch: string,
-): number {
+export function artifactScore(artifact: ArtifactLike, platform: string, arch: string): number {
   const preference = (PREFERRED_FORMATS as Record<string, string[]>)[platform] ?? [];
   const archScore = artifact.arch === arch ? 0 : 1;
   const formatIndex = preference.indexOf(artifact.format);
@@ -109,15 +99,10 @@ export function pickArtifact<T extends ArtifactLike>(
   arch: string,
 ): T | null {
   const candidates = artifacts.filter(
-    (artifact) =>
-      artifact.platform === platform &&
-      (artifact.arch === arch || artifact.arch === 'universal'),
+    (artifact) => artifact.platform === platform && (artifact.arch === arch || artifact.arch === 'universal'),
   );
   if (!candidates.length) return null;
   return candidates.reduce((best, artifact) =>
-    artifactScore(artifact, platform, arch) <
-    artifactScore(best, platform, arch)
-      ? artifact
-      : best,
+    artifactScore(artifact, platform, arch) < artifactScore(best, platform, arch) ? artifact : best,
   );
 }

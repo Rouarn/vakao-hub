@@ -9,15 +9,7 @@ import { StatsController } from './stats.controller.js';
 import { StatsService } from './stats.service.js';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      AppEntity,
-      ReleaseEntity,
-      ArtifactEntity,
-      ClientEventEntity,
-      AuditLogEntity,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([AppEntity, ReleaseEntity, ArtifactEntity, ClientEventEntity, AuditLogEntity])],
   controllers: [StatsController],
   providers: [StatsService],
 })

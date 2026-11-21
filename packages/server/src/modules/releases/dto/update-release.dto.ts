@@ -1,12 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Matches,
-  Min,
-} from 'class-validator';
+import { IsInt, IsOptional, IsString, Length, Matches, Min } from 'class-validator';
 
 export class UpdateReleaseDto {
   @IsOptional()

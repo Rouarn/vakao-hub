@@ -73,7 +73,9 @@
   color: var(--nav-soft);
   font-size: 12px;
   text-align: left;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
 }
 
 .nav-item:hover {

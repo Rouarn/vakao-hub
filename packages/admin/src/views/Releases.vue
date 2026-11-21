@@ -63,9 +63,7 @@ const appOptions = computed<SelectOption[]>(() =>
   apps.value.map((app) => ({ label: `${app.name}（${app.appKey}）`, value: app.id })),
 );
 
-const maxVersionCode = computed(() =>
-  releases.value.reduce((max, item) => Math.max(max, item.versionCode), 0),
-);
+const maxVersionCode = computed(() => releases.value.reduce((max, item) => Math.max(max, item.versionCode), 0));
 
 const columns: DataTableColumns<ReleaseRow> = [
   { title: '版本', key: 'versionName', width: 100 },
@@ -76,9 +74,13 @@ const columns: DataTableColumns<ReleaseRow> = [
     key: 'status',
     width: 90,
     render: (row) =>
-      h(NTag, { type: STATUS_TAG_TYPE[row.status] ?? 'default', size: 'small' }, {
-        default: () => STATUS_LABEL[row.status] ?? String(row.status),
-      }),
+      h(
+        NTag,
+        { type: STATUS_TAG_TYPE[row.status] ?? 'default', size: 'small' },
+        {
+          default: () => STATUS_LABEL[row.status] ?? String(row.status),
+        },
+      ),
   },
   {
     title: '灰度',
@@ -109,17 +111,27 @@ const columns: DataTableColumns<ReleaseRow> = [
     key: 'actions',
     width: 220,
     render: (row) => {
-      const actions = [
-        h(NButton, { size: 'small', onClick: () => openDrawer(row) }, { default: () => '产物' }),
-      ];
-      if (row.status === RELEASE_STATUS.DRAFT || row.status === RELEASE_STATUS.GRAY || row.status === RELEASE_STATUS.OFFLINE) {
-        actions.push(h(NButton, { size: 'small', type: 'primary', onClick: () => openPublish(row) }, { default: () => '发布' }));
+      const actions = [h(NButton, { size: 'small', onClick: () => openDrawer(row) }, { default: () => '产物' })];
+      if (
+        row.status === RELEASE_STATUS.DRAFT ||
+        row.status === RELEASE_STATUS.GRAY ||
+        row.status === RELEASE_STATUS.OFFLINE
+      ) {
+        actions.push(
+          h(NButton, { size: 'small', type: 'primary', onClick: () => openPublish(row) }, { default: () => '发布' }),
+        );
       }
       if (row.status === RELEASE_STATUS.GRAY || row.status === RELEASE_STATUS.PUBLISHED) {
         actions.push(h(NButton, { size: 'small', onClick: () => confirmOffline(row) }, { default: () => '下架' }));
       }
       if (row.status === RELEASE_STATUS.DRAFT || row.status === RELEASE_STATUS.OFFLINE) {
-        actions.push(h(NButton, { size: 'small', type: 'error', secondary: true, onClick: () => confirmRemove(row) }, { default: () => '删除' }));
+        actions.push(
+          h(
+            NButton,
+            { size: 'small', type: 'error', secondary: true, onClick: () => confirmRemove(row) },
+            { default: () => '删除' },
+          ),
+        );
       }
       return h(NSpace, { size: 6 }, { default: () => actions });
     },
@@ -242,17 +254,45 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.releases-head { align-items: flex-end; }
-.head-copy { min-width: 0; }
-.page-sub { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
-.head-actions { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-.app-picker { display: flex; flex-direction: column; gap: 5px; }
-.action-group { display: flex; gap: 8px; }
+.releases-head {
+  align-items: flex-end;
+}
+.head-copy {
+  min-width: 0;
+}
+.page-sub {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.head-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.app-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.action-group {
+  display: flex;
+  gap: 8px;
+}
 
 @media (max-width: 900px) {
-  .releases-head { align-items: flex-start; }
-  .head-actions { width: 100%; }
-  .app-picker { flex: 1; }
-  .app-picker :deep(.n-select) { width: 100% !important; }
+  .releases-head {
+    align-items: flex-start;
+  }
+  .head-actions {
+    width: 100%;
+  }
+  .app-picker {
+    flex: 1;
+  }
+  .app-picker :deep(.n-select) {
+    width: 100% !important;
+  }
 }
 </style>

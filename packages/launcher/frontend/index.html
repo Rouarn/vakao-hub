@@ -1,17 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>VaKao Hub</title>
     <script>
       (function () {
         try {
           if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
           var saved = localStorage.getItem('vakaohub-theme');
-          var theme = saved === 'dark' || saved === 'light'
-            ? saved
-            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          var theme =
+            saved === 'dark' || saved === 'light'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
           document.documentElement.dataset.theme = theme;
         } catch (error) {
           document.documentElement.dataset.theme = 'light';
@@ -59,7 +62,9 @@
         color: var(--splash-ink);
         opacity: 1;
         visibility: visible;
-        transition: opacity 0.4s ease, visibility 0.4s ease;
+        transition:
+          opacity 0.4s ease,
+          visibility 0.4s ease;
       }
 
       #vakao-splash.is-hidden {
@@ -143,18 +148,36 @@
       }
 
       @keyframes splash-in {
-        from { opacity: 0; transform: translateY(8px) scale(0.985); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.985);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
       }
 
       @keyframes splash-breathe {
-        0%, 100% { opacity: 0.55; transform: scale(0.94); }
-        50% { opacity: 1; transform: scale(1.04); }
+        0%,
+        100% {
+          opacity: 0.55;
+          transform: scale(0.94);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.04);
+        }
       }
 
       @keyframes splash-slide {
-        0% { transform: translateX(-120%); }
-        55%, 100% { transform: translateX(340%); }
+        0% {
+          transform: translateX(-120%);
+        }
+        55%,
+        100% {
+          transform: translateX(340%);
+        }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -165,36 +188,36 @@
         }
       }
     </style>
-</head>
-<body>
-<div id="vakao-splash" aria-hidden="true">
-    <div class="splash-glow"></div>
-    <div class="splash-content">
+  </head>
+  <body>
+    <div id="vakao-splash" aria-hidden="true">
+      <div class="splash-glow"></div>
+      <div class="splash-content">
         <img class="splash-star" src="/star-spin.svg" alt="" />
         <div class="splash-word">VaKao <b>Hub</b></div>
         <p class="splash-sub">SOFTWARE SUITE</p>
         <div class="splash-track"><span></span></div>
         <p class="splash-caption">正在整理软件目录</p>
+      </div>
     </div>
-</div>
-<div id="app"></div>
-<script>
-  (function () {
-    var splash = document.getElementById('vakao-splash');
-    var hidden = false;
+    <div id="app"></div>
+    <script>
+      (function () {
+        var splash = document.getElementById('vakao-splash');
+        var hidden = false;
 
-    window.__vakaoHideSplash = function () {
-      if (hidden || !splash) return;
-      hidden = true;
-      splash.classList.add('is-hidden');
-      window.setTimeout(function () {
-        splash.remove();
-      }, 460);
-    };
+        window.__vakaoHideSplash = function () {
+          if (hidden || !splash) return;
+          hidden = true;
+          splash.classList.add('is-hidden');
+          window.setTimeout(function () {
+            splash.remove();
+          }, 460);
+        };
 
-    window.setTimeout(window.__vakaoHideSplash, 5000);
-  })();
-</script>
-<script src="./src/main.ts" type="module"></script>
-</body>
+        window.setTimeout(window.__vakaoHideSplash, 5000);
+      })();
+    </script>
+    <script src="./src/main.ts" type="module"></script>
+  </body>
 </html>

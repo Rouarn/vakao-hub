@@ -1,19 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { rm } from 'node:fs/promises';
 import { Repository } from 'typeorm';
 import type { Paginated } from '@vakao/hub-shared';
 import { AppEntity } from '../../database/entities/app.entity.js';
 import { ArtifactEntity } from '../../database/entities/artifact.entity.js';
-import {
-  RELEASE_STATUS,
-  ReleaseEntity,
-} from '../../database/entities/release.entity.js';
+import { RELEASE_STATUS, ReleaseEntity } from '../../database/entities/release.entity.js';
 import { dirname } from 'node:path';
 import { pruneEmptyDir, resolveStoragePath } from '../../utils/paths.js';
 import type { CreateReleaseDto } from './dto/create-release.dto.js';
@@ -103,10 +95,7 @@ export class ReleasesService {
 
   async update(id: number, dto: UpdateReleaseDto): Promise<ReleaseEntity> {
     const record = await this.getDetail(id);
-    if (
-      record.status === RELEASE_STATUS.GRAY ||
-      record.status === RELEASE_STATUS.PUBLISHED
-    ) {
+    if (record.status === RELEASE_STATUS.GRAY || record.status === RELEASE_STATUS.PUBLISHED) {
       throw new BadRequestException('发布中的版本不可编辑，请先下架');
     }
     if (dto.versionName !== undefined) record.versionName = dto.versionName;
@@ -150,9 +139,7 @@ export class ReleasesService {
 
       const maxFull = row?.max == null ? null : Number(row.max);
       if (maxFull !== null && record.versionCode <= maxFull) {
-        throw new ConflictException(
-          `发布门禁：versionCode ${record.versionCode} 必须大于当前全量版本 ${maxFull}`,
-        );
+        throw new ConflictException(`发布门禁：versionCode ${record.versionCode} 必须大于当前全量版本 ${maxFull}`);
       }
 
       if (dto.mode === 'full') {
@@ -171,8 +158,7 @@ export class ReleasesService {
         );
       }
 
-      record.status =
-        dto.mode === 'gray' ? RELEASE_STATUS.GRAY : RELEASE_STATUS.PUBLISHED;
+      record.status = dto.mode === 'gray' ? RELEASE_STATUS.GRAY : RELEASE_STATUS.PUBLISHED;
       record.grayPercent = dto.mode === 'gray' ? (dto.grayPercent ?? 0) : 0;
       record.offlineReason = null;
       record.publishedAt = Date.now();
@@ -230,10 +216,7 @@ export class ReleasesService {
 
   async offline(id: number): Promise<ReleaseEntity> {
     const record = await this.getDetail(id);
-    if (
-      record.status !== RELEASE_STATUS.GRAY &&
-      record.status !== RELEASE_STATUS.PUBLISHED
-    ) {
+    if (record.status !== RELEASE_STATUS.GRAY && record.status !== RELEASE_STATUS.PUBLISHED) {
       throw new BadRequestException('只有灰度或全量版本可以下架');
     }
     record.status = RELEASE_STATUS.OFFLINE;
@@ -252,10 +235,7 @@ export class ReleasesService {
 
   async remove(id: number): Promise<{ success: true }> {
     const record = await this.getDetail(id);
-    if (
-      record.status === RELEASE_STATUS.GRAY ||
-      record.status === RELEASE_STATUS.PUBLISHED
-    ) {
+    if (record.status === RELEASE_STATUS.GRAY || record.status === RELEASE_STATUS.PUBLISHED) {
       throw new BadRequestException('发布中的版本不可删除，请先下架');
     }
 

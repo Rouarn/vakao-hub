@@ -1,10 +1,4 @@
-import {
-  CallHandler,
-  ExecutionContext,
-  HttpException,
-  Injectable,
-  NestInterceptor,
-} from '@nestjs/common';
+import { CallHandler, ExecutionContext, HttpException, Injectable, NestInterceptor } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request, Response } from 'express';
 import { catchError, tap, throwError } from 'rxjs';
@@ -25,16 +19,11 @@ export class AuditLogInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<
-      Request & { user?: JwtPayload }
-    >();
+    const request = context.switchToHttp().getRequest<Request & { user?: JwtPayload }>();
     const response = context.switchToHttp().getResponse<Response>();
     const path = request.originalUrl.split('?')[0];
 
-    const shouldLog =
-      path.startsWith('/api/v1/admin') &&
-      request.method !== 'GET' &&
-      !path.endsWith('/auth/login');
+    const shouldLog = path.startsWith('/api/v1/admin') && request.method !== 'GET' && !path.endsWith('/auth/login');
 
     if (!shouldLog) return next.handle();
 
@@ -53,8 +42,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => record(response.statusCode || 200)),
       catchError((error: unknown) => {
-        const status =
-          error instanceof HttpException ? error.getStatus() : 500;
+        const status = error instanceof HttpException ? error.getStatus() : 500;
         record(status);
         return throwError(() => error);
       }),

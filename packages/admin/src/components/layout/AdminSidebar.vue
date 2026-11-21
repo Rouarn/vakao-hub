@@ -59,20 +59,34 @@ defineEmits<{
 const groups = [
   {
     title: '概览',
-    items: [{ key: '/dashboard', label: '总览', icon: 'M4 4h6.5v6.5H4zM13.5 4H20v6.5h-6.5zM4 13.5h6.5V20H4zM13.5 13.5H20V20h-6.5z' }],
+    items: [
+      {
+        key: '/dashboard',
+        label: '总览',
+        icon: 'M4 4h6.5v6.5H4zM13.5 4H20v6.5h-6.5zM4 13.5h6.5V20H4zM13.5 13.5H20V20h-6.5z',
+      },
+    ],
   },
   {
     title: '内容',
     items: [
       { key: '/apps', label: '应用管理', icon: 'M4 7.5h16v12H4zM8 7.5V5h8v2.5M4 12h16' },
-      { key: '/releases', label: '版本与产物', icon: 'M12 3l8.5 4.5L12 12 3.5 7.5 12 3zM3.5 12L12 16.5 20.5 12M3.5 16.5L12 21l8.5-4.5' },
+      {
+        key: '/releases',
+        label: '版本与产物',
+        icon: 'M12 3l8.5 4.5L12 12 3.5 7.5 12 3zM3.5 12L12 16.5 20.5 12M3.5 16.5L12 21l8.5-4.5',
+      },
     ],
   },
   {
     title: '监控',
     items: [
       { key: '/events', label: '事件日志', icon: 'M3 12h4l2-6 4 12 2-6h6' },
-      { key: '/audit', label: '操作审计', icon: 'M12 3l7.5 3v5.5c0 4.8-3.2 7.8-7.5 9-4.3-1.2-7.5-4.2-7.5-9V6L12 3zM9 12l2 2 4-4' },
+      {
+        key: '/audit',
+        label: '操作审计',
+        icon: 'M12 3l7.5 3v5.5c0 4.8-3.2 7.8-7.5 9-4.3-1.2-7.5-4.2-7.5-9V6L12 3zM9 12l2 2 4-4',
+      },
     ],
   },
 ];

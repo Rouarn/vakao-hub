@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { JwtPayload } from '../../common/jwt-auth.guard.js';
@@ -27,10 +21,7 @@ export class AuthController {
 
   @Post('change-password')
   @ApiOperation({ summary: '修改管理员密码' })
-  changePassword(
-    @Req() request: Request,
-    @Body() dto: ChangePasswordDto,
-  ) {
+  changePassword(@Req() request: Request, @Body() dto: ChangePasswordDto) {
     const user = (request as Request & { user?: JwtPayload }).user;
     if (!user) throw new UnauthorizedException('请先登录');
     return this.authService.changePassword(user.sub, dto);

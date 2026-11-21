@@ -50,14 +50,14 @@ CLI 路径可用 `HUB_CLI` 环境变量覆盖。
 
 ## 各项目入口
 
-| 项目 | 命令 | 产物 |
-| --- | --- | --- |
-| dockdeck | `Scripts/ship.sh` | dmg（Xcode 构建 + hdiutil） |
-| lanlink | `scripts/ship.sh` | dmg（Tauri） |
-| wiredeck | `Scripts/ship.sh` | dmg（Wails + package.sh） |
-| vakaohub（启动器） | `packages/launcher/ship.sh` | zip（Wails） |
-| skipa | `Scripts/ship.sh` | apk（Gradle） |
-| DianMo | `Scripts/ship.sh` | apk（Gradle） |
-| 小绿记账 | `scripts/ship.sh` | apk（HBuilderX 打好后上传） |
+| 项目               | 命令                        | 产物                        |
+| ------------------ | --------------------------- | --------------------------- |
+| dockdeck           | `Scripts/ship.sh`           | dmg（Xcode 构建 + hdiutil） |
+| lanlink            | `scripts/ship.sh`           | dmg（Tauri）                |
+| wiredeck           | `Scripts/ship.sh`           | dmg（Wails + package.sh）   |
+| vakaohub（启动器） | `packages/launcher/ship.sh` | zip（Wails）                |
+| skipa              | `Scripts/ship.sh`           | apk（Gradle）               |
+| DianMo             | `Scripts/ship.sh`           | apk（Gradle）               |
+| 小绿记账           | `scripts/ship.sh`           | apk（HBuilderX 打好后上传） |
 
 统一支持 `--no-build`（跳过构建只上传）、`--dry-run`（只看计划）、`--no-publish`（只传不发）。

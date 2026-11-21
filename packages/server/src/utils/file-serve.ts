@@ -63,10 +63,7 @@ export async function serveFile(
   res.setHeader('ETag', etag);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Type', mimeByFileName(options.fileName));
-  res.setHeader(
-    'Cache-Control',
-    options.cacheControl ?? 'no-store',
-  );
+  res.setHeader('Cache-Control', options.cacheControl ?? 'no-store');
   res.setHeader(
     'Content-Disposition',
     `attachment; filename*=UTF-8''${encodeURIComponent(basename(options.fileName))}`,
@@ -88,16 +85,9 @@ export async function serveFile(
       return false;
     }
     res.status(206);
-    res.setHeader(
-      'Content-Range',
-      `bytes ${parsed.start}-${parsed.end}/${size}`,
-    );
+    res.setHeader('Content-Range', `bytes ${parsed.start}-${parsed.end}/${size}`);
     res.setHeader('Content-Length', String(parsed.end - parsed.start + 1));
-    streamToResponse(
-      createReadStream(fullPath, { start: parsed.start, end: parsed.end }),
-      req,
-      res,
-    );
+    streamToResponse(createReadStream(fullPath, { start: parsed.start, end: parsed.end }), req, res);
     return true;
   }
 
@@ -107,11 +97,7 @@ export async function serveFile(
 }
 
 /** 将文件流写入响应，并保证读错误不会变成未捕获异常导致进程退出 */
-function streamToResponse(
-  stream: ReturnType<typeof createReadStream>,
-  req: Request,
-  res: Response,
-): void {
+function streamToResponse(stream: ReturnType<typeof createReadStream>, req: Request, res: Response): void {
   const destroy = (): void => {
     if (!stream.destroyed) stream.destroy();
   };

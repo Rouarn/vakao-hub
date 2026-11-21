@@ -1,14 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  ArrayMaxSize,
-  IsArray,
-  IsOptional,
-  IsString,
-  IsUrl,
-  Length,
-  Matches,
-  ValidateNested,
-} from 'class-validator';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, IsUrl, Length, Matches, ValidateNested } from 'class-validator';
 import { FeatureDto } from './create-app.dto.js';
 
 export class UpdateAppDto {

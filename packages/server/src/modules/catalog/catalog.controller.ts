@@ -34,11 +34,6 @@ export class CatalogController {
   @Get()
   @ApiOperation({ summary: '应用目录（启动器首屏）' })
   list(@Query() query: CatalogQueryDto, @Req() req: Request) {
-    return this.catalogService.list(
-      query.platform,
-      query.arch ?? 'universal',
-      query.channel ?? 'stable',
-      req,
-    );
+    return this.catalogService.list(query.platform, query.arch ?? 'universal', query.channel ?? 'stable', req);
   }
 }

@@ -1,17 +1,6 @@
 import { Type } from 'class-transformer';
-import {
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Min,
-} from 'class-validator';
-import {
-  ARCHES,
-  ARTIFACT_FORMATS,
-  PLATFORMS,
-} from '@vakao/hub-shared';
+import { IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
+import { ARCHES, ARTIFACT_FORMATS, PLATFORMS } from '@vakao/hub-shared';
 
 export class UploadArtifactDto {
   @Type(() => Number)

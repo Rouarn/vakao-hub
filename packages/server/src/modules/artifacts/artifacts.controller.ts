@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Param,
-  ParseIntPipe,
-  Post,
-  UploadedFile,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Param, ParseIntPipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ArtifactsService } from './artifacts.service.js';
 import { UploadArtifactDto } from './dto/upload-artifact.dto.js';
@@ -22,10 +13,7 @@ export class ArtifactsController {
   @UseInterceptors(ArtifactUploadInterceptor())
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传产物（APK/DMG/MSI/ZIP/...）' })
-  upload(
-    @Body() dto: UploadArtifactDto,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
+  upload(@Body() dto: UploadArtifactDto, @UploadedFile() file: Express.Multer.File) {
     return this.artifactsService.upload(dto, file);
   }
 
