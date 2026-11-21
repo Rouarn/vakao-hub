@@ -25,11 +25,14 @@ wails3 task darwin:package APP_VERSION="$VERSION"
 # 产物
 bin/VaKaoHub.app
 
-# 发布（含版本一致、签名、归档结构与发布后复核门禁；--dry-run 只检查不上传）
+# 发布（含版本一致、签名、归档结构、包形态与发布后复核门禁；--dry-run 只检查不上传）
 ./ship.sh --dry-run
 
 # 复用 bin/ 里已有产物时用 --no-build；归档与当前 .app 不一致会被门禁拒绝
 ./ship.sh --no-build
+
+# Windows 产物走同一套版本、PE 版本与包形态门禁
+./ship.sh --win32 --dry-run
 ```
 
 `build/darwin/Info.plist`、`build/windows/info.json` 等属于生成物，不要手改；改版本只改 `build/config.yml`，再运行 `common:update:build-assets`。
@@ -54,11 +57,34 @@ bin/VaKaoHub.app
 
 ## 平台安装策略
 
-| 平台    | 支持格式      | 安装位置                                                                    |
-| ------- | ------------- | --------------------------------------------------------------------------- |
-| macOS   | dmg、zip      | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制）                       |
-| Windows | zip、msi、exe | zip 解压到 `%AppData%\VaKaoHub\apps\<appKey>`；msi 静默安装；exe 调起安装器 |
-| Linux   | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications`                 |
+| 平台    | 支持格式      | 安装位置                                                                                                    |
+| ------- | ------------- | ----------------------------------------------------------------------------------------------------------- |
+| macOS   | dmg、zip      | `~/Applications/<App>.app`（DMG 挂载后 `ditto` 复制）                                                       |
+| Windows | zip、msi、exe | zip 解压到 `%AppData%\VaKaoHub\apps\<appKey>`；msi 静默安装；exe 命中安装器标记时调起向导，否则按便携版复制 |
+| Linux   | zip、appimage | `~/.local/share/vakaohub/apps/<appKey>` 或 `~/Applications`                                                 |
+
+### 应用包形态约定
+
+安装端在下载校验后、安装前会检查包结构（`internal/install/package.go`）；发布端 `ship.sh` 通过
+`go run ./cmd/artifact-check` 复用同一份规则，不合规的包在上传前就会被拒绝：
+
+| 平台   | 格式 | 要求                                                                                                                      |
+| ------ | ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| win32  | exe  | 必须是有效的 PE（GUI/Console 均可）；含 NSIS/Inno/Wix/InstallShield/Squirrel 标记时运行安装向导，否则按单文件便携应用安装 |
+| win32  | msi  | 必须是 OLE 复合文档（微软安装包头）                                                                                       |
+| win32  | zip  | 至少一个 `.exe`；顶层有 exe 时以最大者为主程序，否则所有 exe 必须位于同一个顶层目录                                       |
+| darwin | zip  | 必须包含 `*.app/Contents/Info.plist` 与 `*.app/Contents/MacOS/` 下的可执行文件                                            |
+
+所有格式都禁止绝对路径与 `../` 路径穿越。便携应用推荐打成 zip；裸 exe 依赖安装器标记自动识别，
+没有标记的未知安装器会被当成便携应用复制。
+
+打新包后可先在本地校验，再走上传：
+
+```bash
+go run ./cmd/artifact-check --platform win32 --format zip --path /path/to/app.zip
+```
+
+手工在后台直接上传的包不会经过 `ship.sh`，仍需先执行上面的检查。
 
 macOS 使用内置 `hdiutil`/`ditto`，不修改系统安全设置；未公证的应用首次启动仍可能被 Gatekeeper 拦截，启动失败时应用会提示「右键 → 打开」或到系统设置放行。要彻底消除提示，需要 Apple Developer Program（Developer ID 签名 + 公证）。
 

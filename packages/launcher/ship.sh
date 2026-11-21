@@ -132,6 +132,12 @@ sync_build_assets() {
   ( cd "$ROOT" && wails3 task common:update:build-assets )
 }
 
+# 发布端包形态门禁：与安装端共用 install.ValidatePackage，
+# zip 顶层结构、缺主程序、路径穿越等问题在上传前就被挡住。
+check_package() {
+  ( cd "$ROOT" && go run ./cmd/artifact-check --platform "$1" --format "$2" --path "$3" )
+}
+
 # 归档结构、版本与 .app 一致性统一交给独立脚本，便于单测。
 check_archive() {
   local archive="$1"
@@ -290,6 +296,7 @@ if [ "$PLATFORM" = "win32" ]; then
     env INFO_JSON="$ROOT/build/windows/info.json" \
     node -p "require(process.env.INFO_JSON).info['0409'].ProductVersion"
   check_pe_version "$EXE" "$VERSION"
+  check_package win32 exe "$EXE"
 
   UPLOAD=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
     --file "$EXE" --platform win32 --arch x64 --format exe --min-os 10.0 \
@@ -323,6 +330,7 @@ else
     echo "复用已有归档 ${ZIP}（--no-build），先与当前 .app 对比"
   fi
   check_archive "$ZIP" "$APP"
+  check_package darwin zip "$ZIP"
 
   UPLOAD=(node "$CLI" release --app "$APP_KEY" --version "$VERSION" --code "$CODE" \
     --file "$ZIP" --platform darwin --arch "$ARCH_NAME" --format zip --min-os 12.0 \
