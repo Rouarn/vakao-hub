@@ -16,6 +16,7 @@ import (
 
 	"vakaohub/launcher/internal/api"
 	"vakaohub/launcher/internal/apperr"
+	"vakaohub/launcher/internal/contract"
 	"vakaohub/launcher/internal/install"
 	"vakaohub/launcher/internal/store"
 )
@@ -65,7 +66,7 @@ func (s *InstallService) Install(ctx context.Context, appKey string, artifactID 
 		s.fail(appKey, opID, resolved)
 		return store.Installed{}, resolved
 	}
-	if artifact.Platform == "darwin" && artifact.MinOs != "" {
+	if artifact.Platform == contract.PlatformDarwin && artifact.MinOs != "" {
 		if current := hostOSVersion(); current != "" && isNewerVersion(artifact.MinOs, current) {
 			err := apperr.New(
 				apperr.KindUnsupported,
@@ -175,7 +176,7 @@ func (s *InstallService) Install(ctx context.Context, appKey string, artifactID 
 	if installPath == "" {
 		// msi / exe 交给系统安装程序，拿不到可启动路径；不写空路径记录，
 		// 否则下次刷新时 os.Stat("") 必然失败并删掉记录，表现为“装完仍显示未安装”。
-		if artifact.Format == "exe" {
+		if artifact.Format == contract.FormatEXE {
 			s.host.emit(appKey, opID, "done", 100, "已启动安装程序，请按向导完成安装", false)
 		} else {
 			s.host.emit(appKey, opID, "done", 100, "安装完成；未记录启动路径，请从系统应用列表启动", false)
