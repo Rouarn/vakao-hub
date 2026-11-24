@@ -45,6 +45,7 @@
             <div class="detail-actions">
               <button
                 class="action"
+                :class="{ 'is-update': selected.hasUpdate }"
                 :disabled="busy || !supportsOs || selected.installPending || (selected.running && !selected.hasUpdate)"
                 @click="$emit('primary-action', selected)"
               >
@@ -87,6 +88,20 @@
                 </button>
               </div>
             </div>
+          </div>
+
+          <div v-if="progress && busy" class="progress detail-progress">
+            <div class="bar"><span :style="{ width: percentOf(progress.percent) }"></span></div>
+            <div class="progress-foot">
+              <span class="hint">{{ progress.message }}</span>
+              <button class="progress-cancel" @click="$emit('cancel-install', selected)">取消</button>
+            </div>
+          </div>
+
+          <div v-if="note" class="card-note detail-note" :class="note.kind">
+            <span class="note-text">{{ note.message }}</span>
+            <button v-if="note.retry" class="note-action" @click="$emit('retry-note', selected)">重试</button>
+            <button v-else class="note-action" title="知道了" @click="$emit('dismiss-note', selected)">×</button>
           </div>
 
           <div class="detail-links">
@@ -205,10 +220,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { AppView } from '../../bindings/vakaohub/launcher/internal/service';
+import type { AppView, Progress } from '../../bindings/vakaohub/launcher/internal/service';
 import type { DetailMeta } from '../lib/meta';
+import type { CardNote } from '../lib/notes';
 import { appColor, releaseUrl } from '../lib/theme';
-import { formatBytes, formatDate, initial } from '../lib/format';
+import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
 
 const props = defineProps<{
   selected: AppView;
@@ -219,6 +235,8 @@ const props = defineProps<{
   supportsOs: boolean;
   hostOsVersion: string;
   platformLabel: string;
+  progress?: Progress;
+  note?: CardNote;
 }>();
 
 defineEmits<{
@@ -233,6 +251,9 @@ defineEmits<{
   'bind-path': [app: AppView];
   'open-url': [url: string];
   'request-uninstall': [app: AppView];
+  'cancel-install': [app: AppView];
+  'retry-note': [app: AppView];
+  'dismiss-note': [app: AppView];
 }>();
 
 // 安装器类的位置由它自己决定；路径未知时给出可读说明，而不是显示空串。

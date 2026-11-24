@@ -1,9 +1,18 @@
 import { onMounted, onUnmounted, ref } from 'vue';
+import { LauncherService } from '../../bindings/vakaohub/launcher/internal/service';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
 function systemTheme(): 'light' | 'dark' {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+// Windows 的原生标题栏由系统绘制，切换网页主题时顺带通知主进程同步明暗；
+// 其它平台是空操作，浏览器预览没有 Wails 运行时，忽略失败即可。
+function syncNativeTitleBar(dark: boolean): void {
+  void Promise.resolve()
+    .then(() => LauncherService.SetNativeTheme(dark))
+    .catch(() => undefined);
 }
 
 function initialThemeMode(): ThemeMode {
@@ -33,6 +42,7 @@ export function useTheme() {
     } catch {
       // localStorage 不可用时只保留本次会话的主题。
     }
+    syncNativeTitleBar(next === 'dark');
   }
 
   function setThemeMode(mode: ThemeMode): void {

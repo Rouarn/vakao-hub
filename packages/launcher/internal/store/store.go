@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
 type Installed struct {
@@ -23,6 +24,8 @@ type Installed struct {
 
 type Store struct {
 	path string
+	// mu 保护 apps 与落盘顺序：多个应用可以同时安装，Put/Remove 会并发进来。
+	mu   sync.Mutex
 	apps map[string]Installed
 }
 
@@ -62,11 +65,19 @@ func Open() (*Store, error) {
 }
 
 func (s *Store) Get(appKey string) (Installed, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	item, ok := s.apps[appKey]
 	return item, ok
 }
 
 func (s *Store) List() []Installed {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listLocked()
+}
+
+func (s *Store) listLocked() []Installed {
 	items := make([]Installed, 0, len(s.apps))
 	for _, item := range s.apps {
 		items = append(items, item)
@@ -76,21 +87,26 @@ func (s *Store) List() []Installed {
 }
 
 func (s *Store) Put(item Installed) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.apps[item.AppKey] = item
-	return s.save()
+	return s.saveLocked()
 }
 
 func (s *Store) Remove(appKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.apps, appKey)
-	return s.save()
+	return s.saveLocked()
 }
 
-func (s *Store) save() error {
+// saveLocked 要求调用方已持有 s.mu；写入走同一把锁，避免并发安装抢同一个 .tmp 文件。
+func (s *Store) saveLocked() error {
 	if s.path == "" {
 		// 内存模式：目录不可用时仍保持本次会话可用，不落盘
 		return nil
 	}
-	items := s.List()
+	items := s.listLocked()
 	data, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {
 		return err

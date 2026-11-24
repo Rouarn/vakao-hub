@@ -154,6 +154,17 @@ check_package() {
   ( cd "$ROOT" && go run ./cmd/artifact-check --platform "$1" --format "$2" --path "$3" )
 }
 
+# 自更新组件门禁：Go 的 embed 会把 helper 路径作为字面量写进二进制。
+# 缺这个字符串说明更新组件没被打进产物，Windows 端会直接报「更新组件缺失，请重新安装」。
+check_helper_embed() {
+  local file="$1" expected="$2"
+  grep -a -q -F -- "$expected" "$file" || {
+    echo "门禁失败：$file 未内嵌自更新组件 $expected（安装端无法自更新）" >&2
+    exit 1
+  }
+  echo "自更新组件校验通过：$expected"
+}
+
 # 归档结构、版本与 .app 一致性统一交给独立脚本，便于单测。
 check_archive() {
   local archive="$1"
@@ -326,6 +337,7 @@ build_darwin() {
   fi
   check_archive "$ZIP" "$APP"
   check_package darwin zip "$ZIP"
+  check_helper_embed "$BIN" "bin/darwin_$(cd "$ROOT" && go env GOARCH)/vakaohub-updater"
 }
 
 build_win32() {
@@ -345,6 +357,7 @@ build_win32() {
     node -p "require(process.env.INFO_JSON).info['0409'].ProductVersion"
   check_pe_version "$EXE" "$VERSION"
   check_package win32 exe "$EXE"
+  check_helper_embed "$EXE" "bin/windows_amd64/vakaohub-updater.exe"
 }
 
 # --both：两端都构建、都以草稿/下架状态上传（--publish none），全部成功后才统一发布一次。

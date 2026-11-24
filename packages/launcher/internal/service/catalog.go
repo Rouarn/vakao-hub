@@ -27,12 +27,7 @@ func NewCatalog(host *Host) *CatalogService {
 }
 
 func (s *CatalogService) GetCatalog(ctx context.Context) (CatalogView, error) {
-	_, release, err := s.host.beginOp()
-	if err != nil {
-		return CatalogView{}, err
-	}
-	defer release()
-
+	// 目录刷新是只读操作：安装进行中也要允许刷新（下载完成后前端会立刻重新拉一次）。
 	ctx, cancel := context.WithTimeout(ctx, s.host.timeouts.Catalog)
 	defer cancel()
 	return s.catalogLocked(ctx)
@@ -212,7 +207,7 @@ func (s *CatalogService) catalogLocked(ctx context.Context) (CatalogView, error)
 }
 
 func (s *CatalogService) Launch(appKey string) error {
-	_, release, err := s.host.beginOp()
+	_, release, err := s.host.beginAppOp(appKey)
 	if err != nil {
 		return err
 	}
@@ -273,7 +268,7 @@ func (s *CatalogService) Launch(appKey string) error {
 
 // Reveal 在系统文件管理器中选中应用。
 func (s *CatalogService) Reveal(appKey string) error {
-	_, release, err := s.host.beginOp()
+	_, release, err := s.host.beginAppOp(appKey)
 	if err != nil {
 		return err
 	}

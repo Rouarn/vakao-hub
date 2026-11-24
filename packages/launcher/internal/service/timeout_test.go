@@ -32,15 +32,25 @@ func TestGetCatalogTimeout(t *testing.T) {
 	}
 }
 
-func TestGetCatalogBusy(t *testing.T) {
-	host := newTestHost(t, store.NewMemory())
-	host.settings.Set(Settings{BaseURL: "http://127.0.0.1:1"})
-	host.opMu.Lock()
-	defer host.opMu.Unlock()
+// TestCatalogRefreshDuringInstall 验证安装进行中仍可刷新目录：
+// 下载完成后前端会立刻重新拉一次目录，这条路径不能再被「同时只有一个操作」挡住。
+func TestCatalogRefreshDuringInstall(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":200,"data":{"apps":[]}}`))
+	}))
+	defer server.Close()
 
-	_, err := NewCatalog(host).GetCatalog(context.Background())
-	if apperr.KindOf(err) != apperr.KindBusy || !apperr.IsRetryable(err) {
-		t.Fatalf("并发请求 => %s retryable=%v（%v）", apperr.KindOf(err), apperr.IsRetryable(err), err)
+	host := newTestHost(t, store.NewMemory())
+	host.settings.Set(Settings{BaseURL: server.URL})
+
+	_, release, err := host.beginAppOp("demo")
+	if err != nil {
+		t.Fatalf("占用 demo 失败：%v", err)
+	}
+	defer release()
+
+	if _, err := NewCatalog(host).GetCatalog(context.Background()); err != nil {
+		t.Fatalf("安装进行中刷新目录不应被拒绝：%v", err)
 	}
 }
 

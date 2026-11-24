@@ -54,7 +54,16 @@
 
     <div v-if="progress && busy" class="progress">
       <div class="bar"><span :style="{ width: percentOf(progress.percent) }"></span></div>
-      <span class="hint">{{ progress.message }}</span>
+      <div class="progress-foot">
+        <span class="hint">{{ progress.message }}</span>
+        <button class="progress-cancel" @click.stop="$emit('cancel-install', app)">取消</button>
+      </div>
+    </div>
+
+    <div v-if="note" class="card-note" :class="note.kind">
+      <span class="note-text">{{ note.message }}</span>
+      <button v-if="note.retry" class="note-action" @click.stop="$emit('retry-note', app)">重试</button>
+      <button v-else class="note-action" title="知道了" @click.stop="$emit('dismiss-note', app)">×</button>
     </div>
 
     <p v-if="app.duplicates?.length" class="notice">检测到 {{ app.duplicates.length + 1 }} 份安装，请保留一份。</p>
@@ -62,6 +71,7 @@
     <div class="card-bottom">
       <button
         class="action"
+        :class="{ 'is-update': app.hasUpdate }"
         :disabled="busy || updatingAll || !supportsOs || app.installPending || (app.running && !app.hasUpdate)"
         @click.stop="$emit('primary-action', app)"
       >
@@ -99,6 +109,7 @@ import { computed } from 'vue';
 import type { AppView, Progress } from '../../bindings/vakaohub/launcher/internal/service';
 import { appColor } from '../lib/theme';
 import { formatBytes, formatDate, initial, percentOf } from '../lib/format';
+import type { CardNote } from '../lib/notes';
 
 const props = defineProps<{
   app: AppView;
@@ -109,6 +120,7 @@ const props = defineProps<{
   menuOpen: boolean;
   platformLabel: string;
   progress?: Progress;
+  note?: CardNote;
 }>();
 
 const isWindows = computed(() => props.platformLabel === 'Windows');
@@ -123,5 +135,8 @@ defineEmits<{
   'bind-path': [app: AppView];
   'open-url': [url: string];
   'request-uninstall': [app: AppView];
+  'cancel-install': [app: AppView];
+  'retry-note': [app: AppView];
+  'dismiss-note': [app: AppView];
 }>();
 </script>

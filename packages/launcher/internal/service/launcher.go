@@ -3,6 +3,8 @@ package service
 import (
 	"os"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"vakaohub/launcher/internal/apperr"
 	"vakaohub/launcher/internal/install"
 	"vakaohub/launcher/internal/logging"
@@ -16,6 +18,14 @@ type LauncherService struct {
 
 func NewLauncher(host *Host) *LauncherService {
 	return &LauncherService{host: host}
+}
+
+// currentWindow 返回主窗口；测试或浏览器预览下可能没有窗口。
+func (s *LauncherService) currentWindow() application.Window {
+	if s.host == nil || s.host.app == nil {
+		return nil
+	}
+	return s.host.app.Window.Current()
 }
 
 // GetAppVersion 返回构建时注入的启动器版本（开发构建为空串）。

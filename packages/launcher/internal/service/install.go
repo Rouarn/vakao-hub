@@ -22,13 +22,13 @@ type InstallService struct {
 	host *Host
 
 	mu      sync.Mutex
-	pending *pendingArtifact
+	pending map[string]pendingArtifact
 }
 
 // pendingArtifact 是分类不确定时保留的已下载产物：
 // 用户在便携/安装器之间选择后继续安装，避免重新下载整个包。
+// 按 appKey 分开保存，两个应用先后进入选择流程时互不覆盖。
 type pendingArtifact struct {
-	appKey     string
 	artifactID int
 	format     string
 	path       string
@@ -61,7 +61,7 @@ func (s *InstallService) QuitAppsAndInstall(ctx context.Context, appKey string, 
 func (s *InstallService) install(
 	ctx context.Context, appKey string, artifactID int, quitRunning bool, mode string,
 ) (store.Installed, error) {
-	opID, release, err := s.host.beginOp()
+	opID, release, err := s.host.beginAppOp(appKey)
 	if err != nil {
 		return store.Installed{}, err
 	}
@@ -253,7 +253,7 @@ func (s *InstallService) install(
 		}
 	}
 	s.host.emit(appKey, opID, "installing", 100, message, false)
-	result, err := install.Install(ctx, install.Options{
+	result, err := installPackage(ctx, install.Options{
 		Format:     artifact.Format,
 		FilePath:   filePath,
 		AppKey:     app.AppKey,
@@ -351,18 +351,26 @@ func preserveForChoice(artifactID int, source string) (string, error) {
 func (s *InstallService) rememberPending(appKey string, artifactID int, format, path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pending = &pendingArtifact{appKey: appKey, artifactID: artifactID, format: format, path: path}
+	if s.pending == nil {
+		s.pending = make(map[string]pendingArtifact)
+	}
+	s.pending[appKey] = pendingArtifact{artifactID: artifactID, format: format, path: path}
 }
 
-// resumePending 只在应用与产物都匹配时复用保留的包，避免误用上一个应用的下载。
+// resumePending 只在应用与产物都匹配时复用保留的包，避免误用其它应用的下载。
 func (s *InstallService) resumePending(appKey string, artifactID int) string {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	pending := s.pending
-	if pending == nil || pending.artifactID != artifactID || pending.appKey != appKey {
+	pending, ok := s.pending[appKey]
+	if !ok {
+		s.mu.Unlock()
 		return ""
 	}
-	s.pending = nil
+	delete(s.pending, appKey)
+	s.mu.Unlock()
+
+	if pending.artifactID != artifactID {
+		return ""
+	}
 	if _, err := os.Stat(pending.path); err != nil {
 		return ""
 	}
@@ -380,6 +388,9 @@ func (s *InstallService) detectRunning(appKey, target string) ([]install.Running
 
 // runningProcesses 允许测试模拟检测失败。
 var runningProcesses = install.RunningProcesses
+
+// installPackage 允许测试替换真正的落盘安装，专注验证下载、校验与并发控制。
+var installPackage = install.Install
 
 // checkRunning 在安装前检测目标目录内的进程。无法检测时不阻断安装，
 // 但必须让用户知道「运行状态未能确认、已直接继续」，不能静默覆盖。
@@ -410,7 +421,7 @@ func (s *InstallService) fail(appKey, opID string, err error) {
 }
 
 func (s *InstallService) Uninstall(appKey string, deleteData bool) error {
-	_, release, err := s.host.beginOp()
+	_, release, err := s.host.beginAppOp(appKey)
 	if err != nil {
 		return err
 	}
@@ -468,7 +479,7 @@ func (s *InstallService) BindInstalledPath(appKey, appName string) (store.Instal
 	if appKey == selfAppKey {
 		return store.Installed{}, apperr.New(apperr.KindInternal, "bind-path", "启动器自身不需要手动指定位置", nil)
 	}
-	_, release, err := s.host.beginOp()
+	release, err := s.host.beginDialog()
 	if err != nil {
 		return store.Installed{}, err
 	}
@@ -517,7 +528,7 @@ func (s *InstallService) BindInstalledPath(appKey, appName string) (store.Instal
 // SelectInstallDir 打开系统目录选择器；用户取消时返回空串。
 // 选中即校验（存在、可写、在允许范围内），避免保存后才发现装不上。
 func (s *InstallService) SelectInstallDir() (string, error) {
-	_, release, err := s.host.beginOp()
+	release, err := s.host.beginDialog()
 	if err != nil {
 		return "", err
 	}

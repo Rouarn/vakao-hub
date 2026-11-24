@@ -22,6 +22,7 @@ src/
 │   ├── errors.ts           # 后端错误到用户可读文案的映射
 │   ├── format.ts           # 日期、大小、首字母、进度格式化
 │   ├── meta.ts             # 详情类型
+│   ├── notes.ts            # 卡片内联提示类型（错误/告警/信息）
 │   ├── theme.ts            # 主题色、哈希色、色值工具
 │   └── version.ts          # 版本比较
 └── bindings/               # wails3 生成的 Go 绑定（不要手改）
@@ -32,3 +33,5 @@ src/
 - `App.vue` 不直接写大段页面结构，只负责组合组件和业务状态。
 - 新 UI 片段优先放入 `components/`，公共逻辑放入 `composables/` 或 `lib/`。
 - 修改后执行 `pnpm build`（含 `vue-tsc` 类型检查）；发布前用 `wails3 task darwin:package` 或 `./ship.sh`。
+- **反馈就近展示**：不要恢复列表顶部的整条横幅（旧 `.banner` / `.op-bar` / `.update-notice`）。安装进度、取消、失败重试、运行状态告警都走卡片内联区（`CardNote` + `.progress`），详情面板同一套；目录加载失败用空状态占位 + 重试，配置类提示放设置页。
+- 多个应用可以同时安装：前端用 `installCalls` 按 appKey 保存取消句柄，不要再引入单一「当前安装」状态。

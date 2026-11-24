@@ -16,21 +16,12 @@
     />
 
     <main ref="contentRef" class="content">
-      <div v-if="activeInstall" class="op-bar">
-        <span>{{ activeInstallMessage || `正在安装 ${activeInstall.name}，可随时取消` }}</span>
-        <button @click="cancelInstall">取消安装</button>
-      </div>
-      <div v-if="updateNotice" class="update-notice">
-        <span>{{ updateNotice.message }}</span>
-        <button @click="updateNotice = null">知道了</button>
-      </div>
-      <div v-if="errorInfo && errorInfo.kind !== 'canceled'" class="banner">
-        <span>{{ errorInfo.message }}</span>
-        <button v-if="canRetry" @click="retryLast">重试</button>
-        <button @click="openLog">打开日志</button>
-      </div>
-
       <div v-if="loading && !apps.length" class="empty">正在读取软件目录…</div>
+      <div v-else-if="catalogError" class="empty">
+        <p>{{ catalogError.message }}</p>
+        <p class="hint">检查网络或分发服务地址后重试。</p>
+        <button class="empty-retry" @click="load">重试</button>
+      </div>
       <div v-else-if="!visibleApps.length" class="empty">
         <p>{{ search ? '没有匹配的软件。' : '目录还是空的。' }}</p>
         <p class="hint">试试清空搜索，或到管理后台发布版本。</p>
@@ -55,6 +46,7 @@
               :menu-open="menuKey === app.appKey"
               :platform-label="platformLabel"
               :progress="progress[app.appKey]"
+              :note="cardNotes[app.appKey]"
               @open-detail="openDetail"
               @primary-action="primaryAction"
               @toggle-menu="toggleMenu"
@@ -64,6 +56,9 @@
               @bind-path="bindPath"
               @open-url="openUrl"
               @request-uninstall="requestUninstall"
+              @cancel-install="cancelInstall"
+              @retry-note="retryNote"
+              @dismiss-note="dismissNote"
             />
           </div>
         </section>
@@ -80,6 +75,8 @@
       :supports-os="supportsOs(selected)"
       :host-os-version="hostOsVersion"
       :platform-label="platformLabel"
+      :progress="progress[selected.appKey]"
+      :note="cardNotes[selected.appKey]"
       @close="closeDetail"
       @prev="prevApp"
       @next="nextApp"
@@ -91,6 +88,9 @@
       @bind-path="bindPath"
       @open-url="openUrl"
       @request-uninstall="requestUninstall"
+      @cancel-install="cancelInstall"
+      @retry-note="retryNote"
+      @dismiss-note="dismissNote"
     />
 
     <StatusBar :last-checked-label="lastCheckedLabel" :service-online="serviceOnline" @open-url="openUrl" />
@@ -111,6 +111,7 @@
       :default-install-dir="defaultInstallDir"
       :install-dir-editable="installDirEditable"
       :settings-status="settingsStatus"
+      :startup-notice="startupNotice"
       @close="settingsVisible = false"
       @save-base-url="saveBaseUrl"
       @save-install-dir="saveInstallDir"
@@ -121,6 +122,7 @@
       @refresh-changed="saveRefreshInterval"
       @refresh-now="load"
       @open-url="openUrl"
+      @open-log="openLog"
     />
 
     <RunningDialog
@@ -157,12 +159,13 @@ import {
   LauncherService,
   SettingsService,
 } from '../bindings/vakaohub/launcher/internal/service';
-import type { AppView, Progress, Settings, UpdateNotice } from '../bindings/vakaohub/launcher/internal/service';
+import type { AppView, Progress, Settings } from '../bindings/vakaohub/launcher/internal/service';
 import { InstallProgress } from '../bindings/events';
 import { SELF_APP_KEY } from './lib/constants';
 import type { UserError } from './lib/errors';
 import { toUserError } from './lib/errors';
 import type { DetailMeta } from './lib/meta';
+import type { CardNote } from './lib/notes';
 
 import AppCard from './components/AppCard.vue';
 import AppDetailPanel from './components/AppDetailPanel.vue';
@@ -187,7 +190,6 @@ const apps = ref<AppView[]>([]);
 const platform = ref('');
 const arch = ref('');
 const launcherVersion = ref('dev');
-const updateNotice = ref<UpdateNotice | null>(null);
 
 function initialRefreshMinutes(): number {
   try {
@@ -208,10 +210,13 @@ const settings = ref<Settings>({ baseUrl: '', installDir: '' });
 const loading = ref(false);
 const saving = ref(false);
 const updatingAll = ref(false);
-const errorInfo = ref<UserError | null>(null);
-const activeInstall = ref<{ appKey: string; name: string; cancel: () => void } | null>(null);
-const canRetry = ref(false);
-let retryAction: (() => Promise<void>) | null = null;
+// 目录加载失败只在列表为空时占位展示；已有内容时交给底部状态栏的「服务离线」。
+const catalogError = ref<UserError | null>(null);
+// 每个应用一条内联提示，互不覆盖；安装失败、运行状态未知、自更新结果都走这里。
+const cardNotes = ref<Record<string, CardNote>>({});
+// 每个在跑安装的可取消句柄：允许同时更新多个应用，各自取消。
+const installCalls = ref<Record<string, () => void>>({});
+const startupNotice = ref('');
 const busyKeys = ref<Record<string, boolean>>({});
 const progress = ref<Record<string, Progress>>({});
 const settingsVisible = ref(false);
@@ -239,12 +244,6 @@ const lastCheckedAt = ref(0);
 const now = ref(Date.now());
 
 const updateCount = computed(() => apps.value.filter((app) => app.hasUpdate).length);
-
-// 安装进度里带的是当前步骤（下载、退出应用、安装），用户能据此知道走到了哪一步。
-const activeInstallMessage = computed(() => {
-  const current = activeInstall.value;
-  return current ? (progress.value[current.appKey]?.message ?? '') : '';
-});
 
 const lastCheckedLabel = computed(() => {
   if (!lastCheckedAt.value) return '尚未检查';
@@ -330,38 +329,63 @@ let refreshTimer: number | undefined;
 let clockTimer: number | undefined;
 let offProgress: (() => void) | undefined;
 
-function clearError(): void {
-  errorInfo.value = null;
-  canRetry.value = false;
-  retryAction = null;
+function setNote(appKey: string, note: CardNote): void {
+  cardNotes.value = { ...cardNotes.value, [appKey]: note };
 }
 
-function showError(cause: unknown, retry?: () => Promise<void>): void {
+function clearNote(appKey: string): void {
+  if (!cardNotes.value[appKey]) return;
+  const next = { ...cardNotes.value };
+  delete next[appKey];
+  cardNotes.value = next;
+}
+
+function dismissNote(app: AppView): void {
+  clearNote(app.appKey);
+}
+
+function retryNote(app: AppView): void {
+  const retry = cardNotes.value[app.appKey]?.retry;
+  clearNote(app.appKey);
+  void retry?.();
+}
+
+// 错误一律就近展示：传了 appKey 就落在该应用卡片里，否则只有当列表为空时才占位显示。
+function showError(cause: unknown, appKey?: string, retry?: () => Promise<void>): void {
   const info = toUserError(cause);
   if (info.kind === 'canceled') return;
-  errorInfo.value = info;
-  retryAction = info.retryable && retry ? retry : null;
-  canRetry.value = Boolean(retryAction);
+  if (appKey) {
+    setNote(appKey, {
+      kind: 'error',
+      message: info.message,
+      retry: info.retryable && retry ? retry : undefined,
+    });
+    return;
+  }
+  if (!apps.value.length) catalogError.value = info;
 }
 
-function showMessage(message: string): void {
-  errorInfo.value = { code: 'E_INTERNAL', kind: 'internal', retryable: false, message };
-  canRetry.value = false;
-  retryAction = null;
+function showMessage(message: string, appKey?: string): void {
+  if (appKey) {
+    setNote(appKey, { kind: 'warning', message });
+    return;
+  }
+  if (!apps.value.length) {
+    catalogError.value = { code: 'E_INTERNAL', kind: 'internal', retryable: false, message };
+  }
 }
 
-function retryLast(): void {
-  void retryAction?.();
-}
-
-function cancelInstall(): void {
-  const current = activeInstall.value;
-  activeInstall.value = null;
-  if (!current) return;
-  const next = { ...progress.value };
-  delete next[current.appKey];
-  progress.value = next;
-  current.cancel();
+// 取消某个应用的安装：只影响这一张卡片，其它应用继续下载。
+function cancelInstall(app: AppView): void {
+  const cancel = installCalls.value[app.appKey];
+  if (!cancel) return;
+  const nextCalls = { ...installCalls.value };
+  delete nextCalls[app.appKey];
+  installCalls.value = nextCalls;
+  const nextProgress = { ...progress.value };
+  delete nextProgress[app.appKey];
+  progress.value = nextProgress;
+  cancel();
 }
 
 function openLog(): void {
@@ -370,7 +394,7 @@ function openLog(): void {
 
 async function load(): Promise<void> {
   loading.value = true;
-  clearError();
+  catalogError.value = null;
   try {
     launcherVersion.value = (await LauncherService.GetAppVersion()) || 'dev';
     settings.value = await SettingsService.GetSettings();
@@ -384,7 +408,7 @@ async function load(): Promise<void> {
   } catch (cause) {
     serviceOnline.value = false;
     // 后台自动刷新撞上安装/卸载时静默跳过，不打扰用户。
-    if (toUserError(cause).kind !== 'busy') showError(cause, load);
+    if (toUserError(cause).kind !== 'busy') showError(cause);
   } finally {
     loading.value = false;
     lastCheckedAt.value = Date.now();
@@ -400,47 +424,63 @@ async function load(): Promise<void> {
   }
 }
 
-async function install(app: AppView, mode?: 'portable' | 'installer'): Promise<void> {
+type InstallOutcome = 'done' | 'failed' | 'blocked' | 'canceled';
+
+async function install(app: AppView, mode?: 'portable' | 'installer'): Promise<InstallOutcome> {
   // 启动器自身走自更新替换流程，允许在运行中执行；其它运行中的应用由主进程检测并返回 running。
   const selfUpdate = app.appKey === SELF_APP_KEY;
   if (!supportsOs(app)) {
-    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
-    return;
+    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`, app.appKey);
+    return 'failed';
   }
   menuKey.value = '';
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
-  clearError();
+  clearNote(app.appKey);
   const call = mode
     ? InstallService.InstallWithMode(app.appKey, app.artifactID, mode)
     : InstallService.Install(app.appKey, app.artifactID);
-  activeInstall.value = { appKey: app.appKey, name: app.name, cancel: () => call.cancel() };
+  installCalls.value = { ...installCalls.value, [app.appKey]: () => call.cancel() };
   try {
     await call;
+    // 安装成功后，之前「无法确认运行状态」之类的告警就不再成立，一并清掉。
+    clearNote(app.appKey);
     if (selfUpdate) {
       restartForSelfUpdate();
-      return;
+      return 'done';
     }
     await load();
+    return 'done';
   } catch (cause) {
     const info = toUserError(cause);
+    if (info.kind === 'canceled') return 'canceled';
     if (info.kind === 'choice') {
       // 主进程已保留下载好的产物，用户选完直接继续，不会重新下载。
       installChoiceTarget.value = app;
       installChoiceMessage.value = info.message;
-      return;
+      return 'blocked';
     }
     if (info.kind === 'running' && !selfUpdate) {
       // 首次命中不结束进程，先让用户确认；确认后走 QuitAppsAndInstall 继续这次更新。
       runningTarget.value = app;
       runningMessage.value = info.message;
-      return;
+      return 'blocked';
     }
-    showError(cause, () => install(app, mode));
+    setNote(app.appKey, {
+      kind: 'error',
+      message: info.message,
+      retry: info.retryable ? () => install(app, mode) : undefined,
+    });
+    return 'failed';
   } finally {
-    if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
-    const next = { ...busyKeys.value };
-    delete next[app.appKey];
-    busyKeys.value = next;
+    const nextCalls = { ...installCalls.value };
+    delete nextCalls[app.appKey];
+    installCalls.value = nextCalls;
+    const nextBusy = { ...busyKeys.value };
+    delete nextBusy[app.appKey];
+    busyKeys.value = nextBusy;
+    const nextProgress = { ...progress.value };
+    delete nextProgress[app.appKey];
+    progress.value = nextProgress;
   }
 }
 
@@ -467,10 +507,10 @@ async function quitAndInstall(): Promise<void> {
   const app = runningTarget.value;
   if (!app || quitting.value) return;
   quitting.value = true;
-  clearError();
+  clearNote(app.appKey);
   busyKeys.value = { ...busyKeys.value, [app.appKey]: true };
   const call = InstallService.QuitAppsAndInstall(app.appKey, app.artifactID);
-  activeInstall.value = { appKey: app.appKey, name: app.name, cancel: () => call.cancel() };
+  installCalls.value = { ...installCalls.value, [app.appKey]: () => call.cancel() };
   try {
     await call;
     runningTarget.value = null;
@@ -481,10 +521,12 @@ async function quitAndInstall(): Promise<void> {
     runningMessage.value = toUserError(cause).message;
   } finally {
     quitting.value = false;
-    if (activeInstall.value?.appKey === app.appKey) activeInstall.value = null;
-    const next = { ...busyKeys.value };
-    delete next[app.appKey];
-    busyKeys.value = next;
+    const nextCalls = { ...installCalls.value };
+    delete nextCalls[app.appKey];
+    installCalls.value = nextCalls;
+    const nextBusy = { ...busyKeys.value };
+    delete nextBusy[app.appKey];
+    busyKeys.value = nextBusy;
   }
 }
 
@@ -505,12 +547,17 @@ async function updateAll(): Promise<void> {
   // 启动器自身永远处于运行中，只有它允许被「全部更新」带进替换流程；
   // 排到最后，避免自身重启打断其它应用的更新。
   const targets = apps.value
-    .filter((app) => app.hasUpdate && (!app.running || app.appKey === SELF_APP_KEY))
+    .filter((app) => app.hasUpdate && !busy(app.appKey) && (!app.running || app.appKey === SELF_APP_KEY))
     .sort((a, b) => Number(a.appKey === SELF_APP_KEY) - Number(b.appKey === SELF_APP_KEY));
-  for (const app of targets) {
-    await install(app);
+  try {
+    for (const app of targets) {
+      const outcome = await install(app);
+      // 需要用户确认（退出运行中的应用 / 选择安装方式）时先停下，避免连续弹窗把队列卡住。
+      if (outcome === 'blocked') break;
+    }
+  } finally {
+    updatingAll.value = false;
   }
-  updatingAll.value = false;
 }
 
 function supportsOs(app: AppView): boolean {
@@ -520,11 +567,11 @@ function supportsOs(app: AppView): boolean {
 
 async function primaryAction(app: AppView): Promise<void> {
   if (!supportsOs(app)) {
-    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`);
+    showMessage(`该版本需要 macOS ${app.minOs} 或更高版本，当前系统为 ${hostOsVersion.value}`, app.appKey);
     return;
   }
   if (app.installPending) {
-    showMessage('安装程序已启动，正在等待系统登记；完成安装向导后点刷新即可');
+    showMessage('安装程序已启动，正在等待系统登记；完成安装向导后点刷新即可', app.appKey);
     return;
   }
   // 已在运行的应用不执行打开；有更新时进入安装流程，由主进程决定是否需要先退出。
@@ -558,7 +605,7 @@ async function confirmUninstall(): Promise<void> {
 async function uninstall(app: AppView, deleteData: boolean): Promise<void> {
   if (app.running) return;
   menuKey.value = '';
-  clearError();
+  clearNote(app.appKey);
   try {
     await InstallService.Uninstall(app.appKey, deleteData);
     const next = { ...progress.value };
@@ -566,30 +613,30 @@ async function uninstall(app: AppView, deleteData: boolean): Promise<void> {
     progress.value = next;
     await load();
   } catch (cause) {
-    showError(cause, () => uninstall(app, deleteData));
+    showError(cause, app.appKey, () => uninstall(app, deleteData));
   }
 }
 
 async function launch(app: AppView): Promise<void> {
   menuKey.value = '';
-  clearError();
+  clearNote(app.appKey);
   try {
     await CatalogService.Launch(app.appKey);
   } catch (cause) {
-    showError(cause, () => launch(app));
+    showError(cause, app.appKey, () => launch(app));
   }
 }
 
 // 手动指定主程序：用于安装器写注册表的名字对不上、或绿色软件放在别处的情况。
 async function bindPath(app: AppView): Promise<void> {
   menuKey.value = '';
-  clearError();
+  clearNote(app.appKey);
   try {
     await InstallService.BindInstalledPath(app.appKey, app.name);
     await load();
   } catch (cause) {
     if (toUserError(cause).kind === 'canceled') return;
-    showError(cause, () => bindPath(app));
+    showError(cause, app.appKey, () => bindPath(app));
   }
 }
 
@@ -660,7 +707,6 @@ async function chooseInstallDir(): Promise<void> {
 // 保存分发服务地址：只提交这张卡片的字段，另一项沿用已保存值。
 async function saveBaseUrl(): Promise<void> {
   saving.value = true;
-  clearError();
   settingsStatus.value = null;
   try {
     const saved = await SettingsService.SaveSettings(draftBaseUrl.value, settings.value.installDir ?? '');
@@ -678,7 +724,6 @@ async function saveBaseUrl(): Promise<void> {
 // 保存安装位置：同样只提交本卡片字段，成功后留在弹窗里，关闭动作仍丢弃草稿。
 async function saveInstallDir(): Promise<void> {
   saving.value = true;
-  clearError();
   settingsStatus.value = null;
   try {
     const saved = await SettingsService.SaveSettings(settings.value.baseUrl, draftInstallDir.value);
@@ -693,12 +738,14 @@ async function saveInstallDir(): Promise<void> {
   }
 }
 
-function reveal(app: AppView): Promise<void> {
+async function reveal(app: AppView): Promise<void> {
   menuKey.value = '';
-  clearError();
-  return CatalogService.Reveal(app.appKey).catch((cause: unknown) => {
-    showError(cause, () => reveal(app));
-  });
+  clearNote(app.appKey);
+  try {
+    await CatalogService.Reveal(app.appKey);
+  } catch (cause) {
+    showError(cause, app.appKey, () => reveal(app));
+  }
 }
 
 function openUrl(url: string): void {
@@ -758,9 +805,9 @@ function onKeydown(event: KeyboardEvent): void {
 function onProgress(payload: Progress): void {
   // 错误以 Promise 拒绝为准，这里只更新进度，避免 canceled 被当成错误弹窗。
   progress.value = { ...progress.value, [payload.appKey]: payload };
-  // 无法确认运行状态时主进程仍会继续安装；把告警留在可见通知里，避免静默覆盖。
-  if (payload.phase === 'warning' && payload.message) {
-    updateNotice.value = { status: 'warning', message: payload.message, updatedAt: Date.now() };
+  // 无法确认运行状态时主进程仍会继续安装；告警挂在对应应用卡片上，不和失败提示互相覆盖。
+  if (payload.phase === 'warning' && payload.message && cardNotes.value[payload.appKey]?.kind !== 'error') {
+    setNote(payload.appKey, { kind: 'warning', message: payload.message });
   }
 }
 
@@ -779,21 +826,24 @@ function restartRefreshTimer(): void {
 }
 
 // 上次自更新的结果只提示一次：读取后主进程会删除结果文件。
+// 它属于启动器这个应用，落在自己的卡片里，不再占列表顶部的横幅。
 async function loadUpdateNotice(): Promise<void> {
   try {
-    updateNotice.value = await LauncherService.ConsumeUpdateNotice();
+    const notice = await LauncherService.ConsumeUpdateNotice();
+    if (!notice?.message) return;
+    setNote(SELF_APP_KEY, {
+      kind: notice.status === 'success' ? 'info' : 'warning',
+      message: notice.message,
+    });
   } catch {
     // 开发模式（浏览器）没有 Wails 运行时，忽略即可。
   }
 }
 
-// 启动时安装目录失效的提示只出现一次：读取后主进程会清空。
+// 启动时安装目录失效的提示只出现一次：放在设置页的安装位置卡片里，避免启动即弹条。
 async function loadStartupNotice(): Promise<void> {
   try {
-    const message = await SettingsService.GetStartupNotice();
-    if (!message) return;
-    const previous = updateNotice.value?.message ? `${updateNotice.value.message}；` : '';
-    updateNotice.value = { status: 'warning', message: previous + message, updatedAt: Date.now() };
+    startupNotice.value = await SettingsService.GetStartupNotice();
   } catch {
     // 开发模式（浏览器）没有 Wails 运行时，忽略即可。
   }

@@ -43,8 +43,10 @@ type Host struct {
 	store    *store.Store
 	settings *SettingsState
 	events   *EventQueue
+	// opMu 保护 appOps 与 dialogOp：安装按应用加锁，系统选择器全局串行。
 	opMu     sync.Mutex
-	opID     string
+	appOps   map[string]struct{}
+	dialogOp bool
 	timeouts timeouts
 }
 
@@ -96,13 +98,41 @@ func (h *Host) installDir() string {
 	return h.settings.Get().InstallDir
 }
 
-// beginOp 保证同一时刻只有一个长操作；第二个请求直接返回 busy。
-func (h *Host) beginOp() (string, func(), error) {
-	if !h.opMu.TryLock() {
-		return "", nil, apperr.New(apperr.KindBusy, "operation", "", nil)
+// beginAppOp 只对同一应用串行：不同应用可以同时下载、校验与安装，
+// 同一个应用重复点击仍然只跑一次，避免两份安装互相覆盖。
+func (h *Host) beginAppOp(appKey string) (string, func(), error) {
+	h.opMu.Lock()
+	if h.appOps == nil {
+		h.appOps = make(map[string]struct{})
 	}
-	h.opID = newOperationID()
-	return h.opID, h.opMu.Unlock, nil
+	if _, busy := h.appOps[appKey]; busy {
+		h.opMu.Unlock()
+		return "", nil, apperr.New(apperr.KindBusy, "operation.app", "该应用正在更新，请等当前任务完成", nil)
+	}
+	h.appOps[appKey] = struct{}{}
+	h.opMu.Unlock()
+
+	release := func() {
+		h.opMu.Lock()
+		delete(h.appOps, appKey)
+		h.opMu.Unlock()
+	}
+	return newOperationID(), release, nil
+}
+
+// beginDialog 串行化系统选择器：同时弹出两个模态会让窗口层级与焦点不可控。
+func (h *Host) beginDialog() (func(), error) {
+	h.opMu.Lock()
+	defer h.opMu.Unlock()
+	if h.dialogOp {
+		return nil, apperr.New(apperr.KindBusy, "dialog", "已有一个选择窗口在等待，请先完成它", nil)
+	}
+	h.dialogOp = true
+	return func() {
+		h.opMu.Lock()
+		h.dialogOp = false
+		h.opMu.Unlock()
+	}, nil
 }
 
 func newOperationID() string {

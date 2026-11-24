@@ -99,6 +99,7 @@
             >
               {{ statusFor('installDir')?.message }}
             </p>
+            <p v-else-if="startupNotice" class="settings-status error">{{ startupNotice }}</p>
             <div v-if="installDirEditable" class="settings-actions">
               <button class="settings-secondary" @click="$emit('reset-install-dir')">恢复默认</button>
               <button class="settings-primary" :disabled="saving" @click="$emit('save-install-dir')">保存</button>
@@ -130,6 +131,7 @@
               </div>
             </div>
             <div class="settings-links">
+              <button @click="$emit('open-log')">打开日志</button>
               <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub')">GitHub ↗</button>
               <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub/releases')">版本发布 ↗</button>
               <button @click="$emit('open-url', 'https://github.com/Rouarn/vakao-hub#readme')">帮助文档 ↗</button>
@@ -170,6 +172,7 @@ const props = defineProps<{
   defaultInstallDir: string;
   installDirEditable: boolean;
   settingsStatus: SettingsStatus | null;
+  startupNotice: string;
 }>();
 
 // 只显示属于当前卡片的保存结果，两张卡片的反馈互不干扰。
@@ -194,5 +197,6 @@ defineEmits<{
   'refresh-changed': [];
   'refresh-now': [];
   'open-url': [url: string];
+  'open-log': [];
 }>();
 </script>
